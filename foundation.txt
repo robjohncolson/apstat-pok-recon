@@ -1,0 +1,84 @@
+# APStat PoK Chain: Reconceptualized Foundational Architecture Document
+
+## Project Overview
+A decentralized, browser-native Proof-of-Knowledge (PoK) blockchain platform for delivering AP Statistics curriculum through emergent social consensus. Students mine blocks via question-solving transactions, validated by peer attestation quorums rather than centralized keys, fostering collaborative knowledge construction. Architecture prioritizes monolithic in-browser execution to evade firewalls and enable offline operation, with QR-based synchronization for chain growth and curriculum distribution. Reconceptualization pivots from prior ClojureScript iteration by scavenging proven components (e.g., Chart.js rendering from legacy quiz_renderer.html, video links from allUnitsData.js) while prototyping all logic in Racket for clean structure before ClojureScript integration. UI minimized to profile creation (if needed) and current question focus, with stats/QR in bottom modals. Deps absolutely minimal (ideally none post-minify/embed). EDN retained for extensibility to other AP curricula, but question rendering optimized for original JSON/Chart.js format to avoid prior snags—review all questions for proper display. Migration: Examine curriculum.json for structure (array of ~816 questions with id U#-L#-Q#, type multiple-choice, prompt, answerKey, attachments like table 2D arrays, choices, chart-type bar/pie with x-labels/series/values), allUnitsData.js for video URLs (Google Drive/AP Classroom per lesson), quiz_renderer.html for parsing/rendering logic (loadCurriculum fetches JSON, renderQuestion handles prompt/attachments with createChart for Chart.js canvases, hacky table/choice rendering as HTML). Exclusions: Vega-Lite (immature vs Chart.js); keep hacks if practical but clean up. Extensibility: Multi-AP subject (e.g., Calculus via EDN indexer), but MVP AP Stats.
+
+## Core Technical Requirements
+### Non-Negotiable Constraints
+- Serverless execution: All logic/state/rendering in client-side JS, no CORS/external deps post-bundle (minify/embed Chart.js/Crypto-JS/qrcode).
+- Firewall resilience: No runtime network; sync via QR/file imports.
+- Performance bounds: Bundle <3MB (aggressive minify); ops <50ms on 4GB RAM/Dual-core; lesson load ~5KB (JSON modularity).
+- Offline primacy: Full mining/attestation/rendering offline; persistence via IndexedDB for chain/mempool/curriculum/profile.
+- Browser baseline: Chrome 90+; Web APIs (Camera for QR, Crypto for hashing, Canvas for Chart.js) no extensions.
+- Deps: Minimal/zero; embed all (e.g., Chart.js CDN minified inline).
+
+Decision logic: Constraints from school limits; Racket prototypes ensure clean logic before CLJS; Chart.js over Vega for proven rendering (hacky but all charts worked); hide pubkey (under hood); responsive UI for desktop/mobile without keyboard.
+
+### Success Metrics
+- Consensus fidelity: >95% accuracy, <5-day latency in 40-node sims (Racket-validated).
+- Load efficiency: 96% reduction per lesson (modular JSON); render <50ms with Chart.js.
+- Sync payload: <400 bytes deltas (Merkle roots), verifiable locally.
+- Educational alignment: Rep rewards for accuracy/thought leadership (archetypes like aces displayed for "game" element); all questions/charts/tables/videos render fully.
+- UI minimalism: 100% question focus; modals <10% screen.
+
+Decision logic: Metrics emphasize Racket parity; educational bonuses for minority-correct; full rendering validation post-pivot.
+
+## Technology Stack
+Racket for all logic prototypes (immutable, functional for consensus/rep); ClojureScript transpiles to optimized JS; Reagent/Re-frame for reactive UI/state; Chart.js (embedded/minified) for charts (no Vega); Transit for QR payloads; Hodgepodge for IndexedDB; qrcode/jsqr for sync; Crypto-JS for hashing. Versions: CLJS 1.11.132, Re-frame 1.5.0, Chart.js 4.4.4. No additional deps—minify/embed all.
+
+Decision logic: Racket for initial structure (lisp heritage); CLJS for browser; Chart.js for proven JSON rendering (from quiz_renderer.html hacks); Re-frame for complex subs (rep updates); embed to zero deps; hybrid perf detection.
+
+## Project Structure
+Monolithic SPA: src/pok/ namespaces (core init, blockchain PoK/rep/consensus, curriculum load/render, sync QR/delta, ui quiz/modal); resources/json/ for modular curriculum (index + lessons from curriculum.json); public/index.html deploy. Scavenge: Patterns from allUnitsData.js for video URLs, quiz_renderer.html for JSON parsing/Chart.js createChart. Racket prototypes in analysis/racket-proto/ for ports.
+
+Decision logic: Minimal namespaces for maintainability; JSON modularity reduces load; external tools (teacher QR) deprioritize complexity.
+
+## Implementation Phases
+### Phase 1: Racket Logic Prototypes
+Prototype all core fns in Racket (rep time-window prop, consensus quorum, txn schema/id/hash, profile pubkey gen (hide keys), question render parser from JSON). Validate sims (>95% accuracy).
+
+### Phase 2: CLJS Core Port & State
+Port Racket to CLJS pure fns; Re-frame db with profile (archetype/username, hidden keys), curriculum (JSON load/parse from quiz_renderer.html logic).
+
+### Phase 3: Rendering & UI
+Implement Chart.js for charts/tables (from createChart hacks, attachments processing); minimal UI: Question focus with prompt/choices/chart/table, auto-advance/next/prev, video URL links (from allUnitsData.js per lesson). Modals for stats (archetype/rep classification), QR (sync/download/upload).
+
+### Phase 4: Sync & Flow
+QR gen/scan for deltas; full cycle: Submit answer (txn), attestation, consensus, rep update (display archetype).
+
+### Phase 5: Testing, Opt, Deploy
+Unit/integration tests (Racket parity); minify/embed deps (<3MB); responsive UI (screen-aware positioning).
+
+## Critical Implementation Details
+Profile: {:username str :archetype kw (e.g., :aces) :pubkey str (hidden)}; gen via Crypto-JS, display only username/archetype. Txn: {:id uuid :ts Date :pubkey str :qid str :answer str :hash sha256}. Block: {:hash sha256-txns :txns vec :proposer str}. Videos: URL links only, no embeds. UI: Question-centric; modals bottom-linked; responsive without keyboard.
+
+Decision logic: Hide keys for simplicity; archetypes for game element; Racket ensures fidelity.
+
+## External Teacher Tools
+Python script for QR gen (chunks to PNGs/GIFs); optional for lesson distribution.
+
+Decision logic: Offload to teacher for student focus.
+
+## Deployment Configuration
+Shadow-cljs with browser target, advanced opts for <3MB; embed deps inline; single index.html.
+
+Decision logic: Minimal footprint for USB/email.
+
+## Testing Strategy
+Racket unit tests first; CLJS tests for ports; integration for flow; perf on low-spec.
+
+Decision logic: Ensure rendering for all questions/charts.
+
+## Common Pitfalls to Avoid
+JSON parsing hacks (clean in CLJS); dep bloat (embed); over-UI (minimal question focus).
+
+Decision logic: From prior iteration snags.
+
+## Success Checklist
+- [ ] Racket prototypes match logic.
+- [ ] All questions/charts/tables/videos render (Chart.js).
+- [ ] Profile hidden keys, displayed archetype.
+- [ ] Full offline flow <50ms.
+- [ ] Bundle <3MB embedded.
+- [ ] Responsive UI desktop/mobile.
+- [ ] Teacher QR works.
