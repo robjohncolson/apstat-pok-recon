@@ -1,0 +1,7 @@
+9.6K	./index.html
+1.3K	./js/main.js
+0	./PACKAGE-CONTENTS.txt
+11K	./PHASE5-COMPLETE.md
+9.3K	./README.md
+15K	./styles.css
+1.3K	./TEACHER-GUIDE.md

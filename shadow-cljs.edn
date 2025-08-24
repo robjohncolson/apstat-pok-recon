@@ -16,16 +16,20 @@
    :dev {:compiler-options {:closure-defines {re-frame.trace.trace-enabled? true
                                               day8.re-frame.tracing.trace-enabled? true}}}}
   
-  :release
-  {:target :browser
-   :output-dir "public/js"
-   :asset-path "/js"
-   :modules {:main {:init-fn pok.core/main}}
-   :compiler-options {:optimizations :advanced
-                      :infer-externs true
-                      :source-map false
-                      :pretty-print false}
-   :build-options {:manifest true}}
+   :release
+ {:target :browser
+  :output-dir "public/js"
+  :asset-path "/js"
+  :modules {:main {:init-fn pok.core/main}}
+  :compiler-options {:optimizations :advanced
+                     :infer-externs true
+                     :source-map false
+                     :pretty-print false
+                     :elide-asserts true
+                     :pseudo-names false
+                     :fn-invoke-direct true}
+  :build-options {:manifest true
+                  :bundle-size-warning false}}
   
   :test
   {:target :node-test
