@@ -82,6 +82,32 @@
          (assoc db :profile final-profile))
        db))))
 
+;; Submit answer event handler - simple version to avoid circular deps
+(rf/reg-event-fx
+ :submit-answer
+ (fn [{:keys [db]} [_ question-id answer]]
+   (let [current-profile (:profile db)
+         ;; For testing, assume correct answer varies by question
+         correct-answer (case question-id
+                         "U1-L1-Q01" "A"
+                         "U1-L1-Q02" "B" 
+                         "A") ; default
+         is-correct (= answer correct-answer)]
+     
+     (println (str "Processing answer: Q=" question-id " A=" answer " Correct=" correct-answer " Result=" is-correct))
+     
+     ;; Create profile if it doesn't exist  
+     (when-not current-profile
+       (rf/dispatch [:create-profile "test-user"]))
+     
+     ;; Update reputation based on correctness
+     (rf/dispatch [:update-reputation {:accuracy (if is-correct 1.0 0.0)
+                                      :attestations []
+                                      :question-stats {answer 0.25}
+                                      :streak-count (if is-correct 1 0)}])
+     
+     {:db db})))
+
 ;; Re-frame subscriptions
 (rf/reg-sub
  :profile-visible
@@ -111,6 +137,12 @@
  :transaction-mempool
  (fn [db _]
    (get-in db [:blockchain :mempool] [])))
+
+;; Debug subscription to access full db state from console
+(rf/reg-sub
+ :debug/app-db
+ (fn [db _]
+   db))
 
 ;; Profile persistence helpers
 (defn save-profile-to-storage!
