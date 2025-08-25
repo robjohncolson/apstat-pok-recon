@@ -2,6 +2,7 @@
   "Profile Management and Re-frame State for PoK Blockchain
    Phase 5 implementation with archetype system and performance optimization"
   (:require [re-frame.core :as rf]
+            [re-frame.db :as rfdb]
             [pok.reputation :as reputation]))
 
 ;; Profile record definition
@@ -143,6 +144,18 @@
  :debug/app-db
  (fn [db _]
    db))
+
+;; Dev-only: Helper functions for console debugging
+(defn ^:dev/after-load expose-debug-helpers! []
+  (when goog.DEBUG
+    ;; Helper to get subscription values without reactive context
+    (set! (.-getReputationScore js/window) 
+          #(get-in (deref rfdb/app-db) [:profile :reputation-score] "No profile"))
+    (set! (.-getProfile js/window) 
+          #(get (deref rfdb/app-db) :profile "No profile"))
+    (set! (.-getDbPath js/window) 
+          (fn [path] (get-in (deref rfdb/app-db) path "Path not found")))
+    (println "💡 Console helpers: getReputationScore() | getProfile() | getDbPath([path])")))
 
 ;; Profile persistence helpers
 (defn save-profile-to-storage!
