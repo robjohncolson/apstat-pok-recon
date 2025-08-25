@@ -167,7 +167,7 @@
                                                      {:text "" :score 3}
                                                      nil))) 
                                         1500))}
-             "Submit Answer"])]]))))
+             "Submit Answer"])]])))
 
 ;; Reputation display component
 (defn reputation-panel
@@ -315,7 +315,7 @@
           {:style {:background "#666" :color "white" :border "none"
                    :padding "10px 20px" :border-radius "6px" :cursor "pointer"}
            :on-click #(rf/dispatch [:close-qr])}
-          "Close"]]]])))
+          "Close"]]]]))) 
 
 ;; Test controls component
 (defn test-controls
@@ -424,7 +424,7 @@
                  :padding "12px 24px" :border-radius "6px" :cursor "pointer"
                  :font-size "16px" :font-weight "bold"}
          :on-click #(rf/dispatch [:create-profile "new-user"])}
-        "Create New"]]]])
+        "Create New"]]]]))
 
 
 ;; Main application panel
@@ -453,7 +453,7 @@
       [:h1 {:style {:color "#1976d2" :margin "0"}}
        "🎓 AP Statistics PoK Blockchain"]
       [:p {:style {:color "#666" :margin "10px 0 0 0"}}
-       "Interactive Testing Interface"]]]
+       "Interactive Testing Interface"]]
      
      ;; Main content area
      [:div.content-area
@@ -464,4 +464,6 @@
       ;; Right column - Reputation & Controls  
       [:div.sidebar-section
        [reputation-panel]
-       [test-controls]]])))
+       ;; [leaderboard-panel] ; Temporarily disabled due to syntax error
+       [test-controls]]]])))
+

@@ -7,6 +7,11 @@
 (def ^:const MAX-QR-SIZE 400) ; bytes
 (def ^:const CHUNK-SIZE 200) ; bytes per QR chunk
 
+;; Forward declarations
+(declare compress-delta)
+(declare calculate-merkle-hash)
+(declare partition-string)
+
 ;; Create blockchain delta for QR sync
 (defn create-blockchain-delta
   "Creates minimal delta for QR sync (<400 bytes)"

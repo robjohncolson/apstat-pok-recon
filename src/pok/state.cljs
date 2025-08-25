@@ -34,7 +34,7 @@
    "wanderer" "xfactor" "yearning" "zenith" "beacon" "courage" "destiny" "essence" "freedom" "grace"])
 
 ;; Simple hash function using ClojureScript hash
-(defn simple-hash 
+(defn simple-hash
   "Simple hash for key derivation"
   [text]
   (str (.toString (hash text) 16)))
@@ -72,19 +72,19 @@
     ;; Aces: High accuracy (>90%) with fast responses (<3s)
     (and (>= accuracy 0.9) (< response-time 3000) (>= questions-answered 50))
     :aces
-    
+
     ;; Strategists: Good accuracy (>85%) with thoughtful responses (5-8s)
     (and (>= accuracy 0.85) (>= response-time 5000) (<= response-time 8000) (>= questions-answered 30))
     :strategists
-    
+
     ;; Socials: Good collaboration score (>80%) regardless of other metrics
     (>= social-score 0.8)
     :socials
-    
+
     ;; Learners: Steady progress (60-80% accuracy) with moderate engagement
     (and (>= accuracy 0.6) (<= accuracy 0.8) (>= questions-answered 20))
     :learners
-    
+
     ;; Explorers: New users or those still discovering the system
     :else
     :explorers))
@@ -140,7 +140,7 @@
 (rf/reg-event-db
  :load-curriculum
  (fn [db [_ curriculum-data]]
-   (assoc db 
+   (assoc db
           :curriculum curriculum-data
           :current-question-index 0
           :current-question (first curriculum-data))))
@@ -153,10 +153,10 @@
          keys (derive-keys seedphrase)]
      (js/console.log "Generated seed:" seedphrase)
      (js/console.log "Derived pubkey:" (:pubkey keys))
-     {:db (assoc db 
-                :seedphrase seedphrase
-                :privkey (:privkey keys)
-                :pubkey (:pubkey keys))})))
+     {:db (assoc db
+                 :seedphrase seedphrase
+                 :privkey (:privkey keys)
+                 :pubkey (:pubkey keys))})))
 
 (rf/reg-event-fx
  :create-profile
@@ -165,30 +165,30 @@
          needs-seed (not (:seedphrase db))
          current-seedphrase (if needs-seed (generate-seedphrase) (:seedphrase db))
          keys (if needs-seed (derive-keys current-seedphrase) {:privkey (:privkey db) :pubkey (:pubkey db)})
-         
+
          new-profile (map->Profile {:username username
-                                   :archetype :explorers
-                                   :pubkey (:pubkey keys)
-                                   :privkey (:privkey keys)
-                                   :reputation-score 100.0})
-         
+                                    :archetype :explorers
+                                    :pubkey (:pubkey keys)
+                                    :privkey (:privkey keys)
+                                    :reputation-score 100.0})
+
          ;; Create "create-user" transaction
          user-tx {:type "create-user"
-                 :pubkey (:pubkey keys)
-                 :username username
-                 :timestamp (.now js/Date)
-                 :attester-pubkey (:pubkey keys)
-                 :signature (str (:privkey keys) "-mock-sig")}]
-     
+                  :pubkey (:pubkey keys)
+                  :username username
+                  :timestamp (.now js/Date)
+                  :attester-pubkey (:pubkey keys)
+                  :signature (str (:privkey keys) "-mock-sig")}]
+
      (when needs-seed
        (js/console.log "Generated seed for new profile:" current-seedphrase))
-     
-     {:db (assoc db 
-                :profile new-profile
-                :seedphrase current-seedphrase
-                :privkey (:privkey keys)
-                :pubkey (:pubkey keys)
-                :unlocked true)
+
+     {:db (assoc db
+                 :profile new-profile
+                 :seedphrase current-seedphrase
+                 :privkey (:privkey keys)
+                 :pubkey (:pubkey keys)
+                 :unlocked true)
       :dispatch [:add-to-mempool user-tx]})))
 
 (rf/reg-event-db
@@ -199,18 +199,18 @@
 
 (rf/reg-event-db
  :update-reputation
- (fn [db [_ {:keys [accuracy attestations question-stats streak-count time-windows] 
+ (fn [db [_ {:keys [accuracy attestations question-stats streak-count time-windows]
              :or {accuracy 1.0 attestations [] question-stats {} streak-count 0 time-windows 0}}]]
    (let [current-profile (:profile db)]
      (if current-profile
        ;; Use the complete reputation calculation from reputation.cljs
-       (let [updated-profile (reputation/update-reputation-score 
-                             current-profile accuracy attestations question-stats streak-count)
+       (let [updated-profile (reputation/update-reputation-score
+                              current-profile accuracy attestations question-stats streak-count)
              ;; Apply time decay if time-windows is provided
              final-profile (if (> time-windows 0)
-                            (update updated-profile :reputation-score 
-                                   #(reputation/reputation-decay % (* time-windows 24)))
-                            updated-profile)]
+                             (update updated-profile :reputation-score
+                                     #(reputation/reputation-decay % (* time-windows 24)))
+                             updated-profile)]
          (assoc db :profile final-profile))
        db))))
 
@@ -227,26 +227,26 @@
      (let [current-profile (:profile db)
            current-question (:current-question db)
            question-type (:type current-question)
-           
+
            ;; Determine question type
            current-type (cond
-                         (or (:choices current-question) (= question-type "multiple-choice")) "multiple-choice"
-                         (= question-type "free-response") "free-response"
-                         :else "multiple-choice")]
-       
+                          (or (:choices current-question) (= question-type "multiple-choice")) "multiple-choice"
+                          (= question-type "free-response") "free-response"
+                          :else "multiple-choice")]
+
        (println (str "Processing answer: Q=" question-id " Type=" current-type " A=" answer))
-       
+
        ;; Create profile if it doesn't exist  
        (when-not current-profile
          (rf/dispatch [:create-profile "test-user"]))
-       
+
        ;; Create transaction and add to mempool
        (let [tx (blockchain/create-tx question-id answer current-type (:pubkey db) (:privkey db))]
          (rf/dispatch [:add-to-mempool tx]))
-       
+
        ;; PoK: No immediate reputation updates - mining handles this
        ;; Auto-advance handled in views.cljs
-       
+
        {:db db}))))
 
 ;; Load next question event handler
@@ -257,7 +257,7 @@
          curriculum (:curriculum db)
          next-index (mod (inc current-index) (count curriculum))
          next-question (nth curriculum next-index nil)]
-     (assoc db 
+     (assoc db
             :current-question-index next-index
             :current-question next-question))))
 
@@ -269,7 +269,7 @@
          curriculum (:curriculum db)
          prev-index (mod (dec current-index) (count curriculum))
          prev-question (nth curriculum prev-index nil)]
-     (assoc db 
+     (assoc db
             :current-question-index prev-index
             :current-question prev-question))))
 
@@ -297,21 +297,21 @@
          (do
            (js/console.log "Block mined with peer quorum:" (clj->js (:block mined-result)))
            (js/console.log "Updated distributions:" (clj->js (:updated-distributions mined-result)))
-           
+
            ;; Update reputation for each transaction in the block (only after peer attestation)
            (doseq [rep-update (blockchain/extract-reputation-updates (:block mined-result))]
              (when rep-update
                (rf/dispatch [:update-reputation rep-update])))
-           
+
            ;; Update database with new block and distributions
-           (let [updated-db (assoc db 
-                                  :chain (:chain mined-result)
-                                  :mempool (:mempool mined-result) 
-                                  :distributions (:distributions mined-result)
-                                  :pubkey-map (derive-pubkey-map-from-chain (:chain mined-result)))]
+           (let [updated-db (assoc db
+                                   :chain (:chain mined-result)
+                                   :mempool (:mempool mined-result)
+                                   :distributions (:distributions mined-result)
+                                   :pubkey-map (derive-pubkey-map-from-chain (:chain mined-result)))]
              {:db updated-db
               :dispatch [:save-state]}))
-         
+
          ;; No block mined (insufficient peer quorum)
          (do
            (js/console.log "Mining failed: Peer quorum not reached (need >=2 attestations)")
@@ -418,12 +418,12 @@
   "Derives pubkey->username mapping from create-user transactions in chain"
   [chain]
   (reduce (fn [acc block]
-           (reduce (fn [acc2 tx]
-                    (if (= (:type tx) "create-user")
-                      (assoc acc2 (:pubkey tx) (:username tx))
-                      acc2))
-                  acc (:transactions block)))
-         {} chain))
+            (reduce (fn [acc2 tx]
+                      (if (= (:type tx) "create-user")
+                        (assoc acc2 (:pubkey tx) (:username tx))
+                        acc2))
+                    acc (:transactions block)))
+          {} chain))
 
 ;; Save state to localStorage
 (rf/reg-event-fx
@@ -445,24 +445,24 @@
          loaded-curriculum (or (load-from-local "pok-curriculum") [])
          loaded-index (or (load-from-local "pok-question-index") 0)
          loaded-pubkey (load-from-local "pok-pubkey")
-         
+
          ;; Derive data from chain
          pubkey-map (derive-pubkey-map-from-chain loaded-chain)
          distributions (blockchain/derive-distributions-from-chain loaded-chain)
          reputation (blockchain/derive-reputation-from-chain loaded-chain)]
-     
+
      (js/console.log "Loaded state - Chain:" (count loaded-chain) "blocks, Mempool:" (count loaded-mempool) "txs")
-     
+
      {:db (assoc db
-                :chain loaded-chain
-                :mempool loaded-mempool
-                :curriculum loaded-curriculum
-                :current-question-index loaded-index
-                :current-question (nth loaded-curriculum loaded-index nil)
-                :pubkey loaded-pubkey
-                :pubkey-map pubkey-map
-                :distributions distributions
-                :reputation reputation)}))
+                 :chain loaded-chain
+                 :mempool loaded-mempool
+                 :curriculum loaded-curriculum
+                 :current-question-index loaded-index
+                 :current-question (nth loaded-curriculum loaded-index nil)
+                 :pubkey loaded-pubkey
+                 :pubkey-map pubkey-map
+                 :distributions distributions
+                 :reputation reputation)})))
 
 ;; Unlock profile with seedphrase
 (rf/reg-event-fx
@@ -470,21 +470,21 @@
  (fn [{:keys [db]} [_ seedphrase]]
    (let [keys (derive-keys seedphrase)
          stored-pubkey (load-from-local "pok-pubkey")]
-     
+
      (if (and stored-pubkey (= (:pubkey keys) stored-pubkey))
        ;; Correct seedphrase - unlock and load state
        (do
          (js/console.log "Profile unlocked successfully")
          {:db (assoc db
-                    :seedphrase seedphrase
-                    :privkey (:privkey keys)
-                    :pubkey (:pubkey keys)
-                    :unlocked true)
+                     :seedphrase seedphrase
+                     :privkey (:privkey keys)
+                     :pubkey (:pubkey keys)
+                     :unlocked true)
           :dispatch [:load-state]})
        ;; Incorrect seedphrase or no stored profile
        (do
          (js/alert "Invalid seedphrase or no existing profile. Create new profile?")
-         {:db db}))))
+         {:db db})))))
 
 ;; QR Sync Events
 (rf/reg-event-db
@@ -526,34 +526,34 @@
              quorum-txs (blockchain/filter-quorum-txs attested-mempool)
              updated-distributions (blockchain/derive-distributions-from-chain merged-chain)
              updated-pubkey-map (derive-pubkey-map-from-chain merged-chain)]
-         
+
          (js/console.log "Import successful:" (count (:chain imported)) "blocks," (count (:mempool imported)) "transactions")
          (js/console.log "Quorum transactions:" (count quorum-txs))
-         
+
          ;; Auto-mine if any transactions meet quorum
          (let [updated-db (assoc db
-                                :chain merged-chain
-                                :mempool quorum-txs
-                                :distributions updated-distributions
-                                :pubkey-map updated-pubkey-map)]
+                                 :chain merged-chain
+                                 :mempool quorum-txs
+                                 :distributions updated-distributions
+                                 :pubkey-map updated-pubkey-map)]
            {:db updated-db
             :dispatch-n [[:save-state]
-                        [:close-qr]
-                        (when (> (count quorum-txs) 0) [:mine-block])]}))
-       
+                         [:close-qr]
+                         (when (> (count quorum-txs) 0) [:mine-block])]}))
+
        (catch js/Error e
          (js/alert (str "Import failed: " (.-message e)))
-         {:db db}))))))
+         {:db db})))))
 
 ;; Dev-only: Helper functions for console debugging
 (defn ^:dev/after-load expose-debug-helpers! []
   (when goog.DEBUG
     ;; Helper to get subscription values without reactive context
-    (set! (.-getReputationScore js/window) 
+    (set! (.-getReputationScore js/window)
           #(get-in (deref rfdb/app-db) [:profile :reputation-score] "No profile"))
-    (set! (.-getProfile js/window) 
+    (set! (.-getProfile js/window)
           #(get (deref rfdb/app-db) :profile "No profile"))
-    (set! (.-getDbPath js/window) 
+    (set! (.-getDbPath js/window)
           (fn [path] (get-in (deref rfdb/app-db) path "Path not found")))
     (set! (.-getSeed js/window)
           #(get (deref rfdb/app-db) :seedphrase "No seed"))
@@ -588,4 +588,20 @@
        (keyword? (:archetype profile))
        (contains? ARCHETYPES (:archetype profile))
        (string? (:pubkey profile))
-       (number? (:reputation-score profile)))))
+       (number? (:reputation-score profile))))
+
+;; Leaderboard subscription
+(rf/reg-sub
+ :leaderboard
+ (fn [db _]
+   (let [chain (:chain db [])
+         pubkey-map (:pubkey-map db {})
+         users (blockchain/derive-users chain)
+         current-pubkey (:pubkey db)]
+     (->> users
+          (sort-by :rep >)
+          (map (fn [user]
+                 {:name (if (= (:pubkey user) current-pubkey)
+                          "You"
+                          (get pubkey-map (:pubkey user) "Anonymous"))
+                  :rep (:rep user)}))))))

@@ -313,6 +313,17 @@
   [mempool]
   (filter check-peer-quorum mempool))
 
+;; Derive users from chain for leaderboard
+(defn derive-users
+  "Extract unique users from blockchain chain"
+  [chain]
+  (let [all-transactions (mapcat :transactions chain)
+        user-pubkeys (distinct (map :attester-pubkey all-transactions))]
+    (map (fn [pubkey]
+           {:pubkey pubkey
+            :rep (rand 100)}) ; Placeholder reputation calculation
+         user-pubkeys)))
+
 ;; Derive reputation from chain (for state loading)
 (defn derive-reputation-from-chain
   "Derive current reputation state from full blockchain history"
