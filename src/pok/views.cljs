@@ -218,6 +218,105 @@
          {:style {:color "#666" :font-size "14px"}}
          "User: " (:username profile)]])]))
 
+;; QR Sync Modal component
+(defn qr-modal
+  "Modal for QR code export/import sync"
+  []
+  (let [active-tab (r/atom "export")
+        import-text (r/atom "")]
+    (fn []
+      [:div.qr-modal
+       {:style {:position "fixed"
+                :top 0 :left 0 :right 0 :bottom 0
+                :background "rgba(0,0,0,0.5)"
+                :display "flex"
+                :align-items "center"
+                :justify-content "center"
+                :z-index 1000}}
+       [:div.modal-content
+        {:style {:background "white"
+                 :border-radius "12px"
+                 :padding "30px"
+                 :max-width "500px"
+                 :width "90%"
+                 :box-shadow "0 8px 24px rgba(0,0,0,0.2)"}}
+        [:h2 {:style {:color "#2c3e50" :margin "0 0 20px 0" :text-align "center"}}
+         "🔄 Sync QR"]
+        
+        ;; Tab buttons
+        [:div.tab-buttons
+         {:style {:display "flex" :margin-bottom "20px" :border-bottom "1px solid #e0e0e0"}}
+         [:button
+          {:style {:padding "10px 20px" :border "none" :background "transparent"
+                   :color (if (= @active-tab "export") "#1976d2" "#666")
+                   :border-bottom (if (= @active-tab "export") "2px solid #1976d2" "none")
+                   :cursor "pointer" :font-weight (if (= @active-tab "export") "bold" "normal")}
+           :on-click #(reset! active-tab "export")}
+          "Export"]
+         [:button
+          {:style {:padding "10px 20px" :border "none" :background "transparent"
+                   :color (if (= @active-tab "import") "#1976d2" "#666")
+                   :border-bottom (if (= @active-tab "import") "2px solid #1976d2" "none")
+                   :cursor "pointer" :font-weight (if (= @active-tab "import") "bold" "normal")}
+           :on-click #(reset! active-tab "import")}
+          "Import"]]
+        
+        ;; Tab content
+        (if (= @active-tab "export")
+          ;; Export tab
+          [:div.export-tab
+           [:p {:style {:color "#666" :margin "0 0 15px 0"}}
+            "Generate QR code of your blockchain state:"]
+           [:div#qr-code-container
+            {:style {:text-align "center" :margin "20px 0" :min-height "200px"
+                     :border "1px solid #e0e0e0" :border-radius "8px" :padding "20px"}}
+            "QR code will appear here"]
+           [:button
+            {:style {:background "#1976d2" :color "white" :border "none"
+                     :padding "10px 20px" :border-radius "6px" :cursor "pointer"}
+             :on-click #(rf/dispatch [:generate-qr])}
+            "Generate QR"]]
+          
+          ;; Import tab
+          [:div.import-tab
+           [:p {:style {:color "#666" :margin "0 0 15px 0"}}
+            "Paste blockchain state or upload file:"]
+           [:textarea
+            {:value @import-text
+             :on-change #(reset! import-text (.. % -target -value))
+             :rows 8
+             :style {:width "100%" :padding "12px" :border "2px solid #e0e0e0"
+                     :border-radius "6px" :font-family "monospace" :font-size "12px"
+                     :margin-bottom "15px"}
+             :placeholder "Paste JSON data here..."}]
+           [:input
+            {:type "file"
+             :accept ".json,.txt"
+             :style {:margin-bottom "15px"}
+             :on-change (fn [e]
+                         (let [file (-> e .-target .-files (aget 0))
+                               reader (js/FileReader.)]
+                           (set! (.-onload reader)
+                                 #(reset! import-text (-> % .-target .-result)))
+                           (when file (.readAsText reader file))))}
+            "Choose file..."]
+           [:button
+            {:style {:background "#4caf50" :color "white" :border "none"
+                     :padding "10px 20px" :border-radius "6px" :cursor "pointer"}
+             :disabled (empty? @import-text)
+             :on-click #(when-not (empty? @import-text)
+                         (rf/dispatch [:import-qr @import-text])
+                         (reset! import-text ""))}
+            "Import Data"]])
+        
+        ;; Close button
+        [:div {:style {:text-align "center" :margin-top "20px"}}
+         [:button
+          {:style {:background "#666" :color "white" :border "none"
+                   :padding "10px 20px" :border-radius "6px" :cursor "pointer"}
+           :on-click #(rf/dispatch [:close-qr])}
+          "Close"]]]])))
+
 ;; Test controls component
 (defn test-controls
   "Controls for testing the reputation system"
@@ -257,6 +356,12 @@
         :on-click #(let [results (js/pok.flow.test_complete_cycle)]
                     (js/console.log "Test cycle results:" results))}
        "Run Test Cycle"]
+      
+      [:button
+       {:style {:background "#ff5722" :color "white" :border "none"
+                :padding "8px 16px" :border-radius "4px" :cursor "pointer"}
+        :on-click #(rf/dispatch [:show-qr])}
+       "Sync QR"]
       
       [:button
        {:style {:background "#ff9800" :color "white" :border "none"
@@ -338,13 +443,17 @@
      (when (and (not unlocked) (not profile))
        [unlock-modal])
      
+     ;; QR sync modal if shown
+     (when @(rf/subscribe [::state/qr-modal-visible])
+       [qr-modal])
+     
      ;; Header
      [:div.app-header
       {:style {:text-align "center" :margin-bottom "30px"}}
       [:h1 {:style {:color "#1976d2" :margin "0"}}
        "🎓 AP Statistics PoK Blockchain"]
       [:p {:style {:color "#666" :margin "10px 0 0 0"}}
-       "Interactive Testing Interface"]]
+       "Interactive Testing Interface"]]]
      
      ;; Main content area
      [:div.content-area

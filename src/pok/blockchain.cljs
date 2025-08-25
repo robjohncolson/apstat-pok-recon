@@ -75,11 +75,11 @@
     
     :else nil))
 
-;; Check quorum (MVP = 1)
+;; Check quorum (Phase 5: requires peer attestation = 2)
 (defn check-quorum
-  "Check if quorum is reached (MVP quorum=1)"
+  "Check if quorum is reached (Phase 5 peer quorum=2)"
   [attestations]
-  (>= (count attestations) 1))
+  (>= (count attestations) 2))
 
 ;; Update MCQ distribution
 (defn update-mcq-distribution
@@ -241,6 +241,77 @@
   [chain]
   (let [all-transactions (mapcat :transactions chain)]
     (reduce update-single-distribution {} all-transactions)))
+
+;; QR Sync Functions
+(defn export-state
+  "Export blockchain state as JSON string for QR sharing"
+  [chain mempool distributions]
+  (js/JSON.stringify 
+    (clj->js {:chain chain
+              :mempool mempool
+              :distributions distributions})))
+
+(defn import-state
+  "Import and parse blockchain state from JSON string"
+  [json-str]
+  (js->clj (js/JSON.parse json-str) :keywordize-keys true))
+
+(defn merge-chain
+  "Merge imported chain with current chain, sort by timestamp, dedupe by hash"
+  [current-chain imported-chain]
+  (->> (concat current-chain imported-chain)
+       (map #(assoc % :sort-key (:timestamp %)))
+       (sort-by :sort-key)
+       (distinct)))
+
+(defn merge-mempool
+  "Merge imported mempool with current mempool, dedupe by question-id and timestamp"
+  [current-mempool imported-mempool]
+  (->> (concat current-mempool imported-mempool)
+       (distinct)))
+
+(defn attest-imported-tx
+  "Auto-attest imported transaction if it matches own stored answer"
+  [tx own-answers pubkey privkey]
+  (let [qid (:question-id tx)
+        own-answer (get own-answers qid)]
+    (cond
+      ;; MCQ: check if hash matches
+      (and (:answer-hash tx) own-answer)
+      (let [own-hash (sha256-hash (str own-answer))
+            is-match (= (:answer-hash tx) own-hash)
+            attestation {:attester-pubkey pubkey
+                        :signature (str privkey "-attest-" (:timestamp tx))
+                        :match? is-match
+                        :timestamp (.now js/Date)}]
+        (update tx :attestations conj attestation))
+      
+      ;; FRQ: check if score within ±1 range
+      (and (:answer-text tx) (:score own-answer))
+      (let [score-diff (Math/abs (- (:score tx) (:score own-answer)))
+            is-match (<= score-diff 1)
+            attestation {:attester-pubkey pubkey
+                        :signature (str privkey "-attest-" (:timestamp tx))
+                        :match? is-match
+                        :timestamp (.now js/Date)}]
+        (update tx :attestations conj attestation))
+      
+      :else tx)))
+
+(defn auto-attest-mempool
+  "Auto-attest all imported transactions in mempool"
+  [mempool own-answers pubkey privkey]
+  (map #(attest-imported-tx % own-answers pubkey privkey) mempool))
+
+(defn check-peer-quorum
+  "Check if transaction has peer quorum (>=2 attestations for Phase 5)"
+  [tx]
+  (>= (count (:attestations tx)) 2))
+
+(defn filter-quorum-txs
+  "Filter transactions that meet peer quorum requirement"
+  [mempool]
+  (filter check-peer-quorum mempool))
 
 ;; Derive reputation from chain (for state loading)
 (defn derive-reputation-from-chain

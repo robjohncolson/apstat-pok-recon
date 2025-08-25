@@ -281,7 +281,7 @@
      {:db updated-db
       :dispatch [:save-state]})))
 
-;; Mine block from mempool with persistence
+;; Mine block from mempool with persistence (Phase 5: requires peer quorum)
 (rf/reg-event-fx
  :mine-block
  (fn [{:keys [db]} _]
@@ -290,15 +290,15 @@
      (do
        (js/alert "Profile must be unlocked to mine blocks")
        {:db db})
-     ;; Continue with mining
+     ;; Continue with mining (now requires peer quorum >= 2)
      (let [mined-result (blockchain/mine-block db)]
        (if (:block mined-result)
          ;; Block mined successfully
          (do
-           (js/console.log "Block mined:" (clj->js (:block mined-result)))
+           (js/console.log "Block mined with peer quorum:" (clj->js (:block mined-result)))
            (js/console.log "Updated distributions:" (clj->js (:updated-distributions mined-result)))
            
-           ;; Update reputation for each transaction in the block
+           ;; Update reputation for each transaction in the block (only after peer attestation)
            (doseq [rep-update (blockchain/extract-reputation-updates (:block mined-result))]
              (when rep-update
                (rf/dispatch [:update-reputation rep-update])))
@@ -312,8 +312,10 @@
              {:db updated-db
               :dispatch [:save-state]}))
          
-         ;; No block mined
-         {:db db})))))
+         ;; No block mined (insufficient peer quorum)
+         (do
+           (js/console.log "Mining failed: Peer quorum not reached (need >=2 attestations)")
+           {:db db}))))))
 
 ;; Re-frame subscriptions
 (rf/reg-sub
@@ -405,6 +407,12 @@
  (fn [db _]
    (:pubkey db)))
 
+;; QR Modal subscription
+(rf/reg-sub
+ ::qr-modal-visible
+ (fn [db _]
+   (get-in db [:ui :modals :qr] false)))
+
 ;; Derive pubkey-to-username mapping from chain
 (defn derive-pubkey-map-from-chain
   "Derives pubkey->username mapping from create-user transactions in chain"
@@ -476,7 +484,66 @@
        ;; Incorrect seedphrase or no stored profile
        (do
          (js/alert "Invalid seedphrase or no existing profile. Create new profile?")
-         {:db db})))))
+         {:db db}))))
+
+;; QR Sync Events
+(rf/reg-event-db
+ :show-qr
+ (fn [db _]
+   (assoc-in db [:ui :modals :qr] true)))
+
+(rf/reg-event-db
+ :close-qr
+ (fn [db _]
+   (assoc-in db [:ui :modals :qr] false)))
+
+(rf/reg-event-fx
+ :generate-qr
+ (fn [{:keys [db]} _]
+   (let [export-data (blockchain/export-state (:chain db) (:mempool db) (:distributions db))]
+     ;; Generate QR using qrcode.js CDN
+     (when js/QRCode
+       (let [container (.getElementById js/document "qr-code-container")]
+         (.innerHTML container "")
+         (js/QRCode. container export-data #js {:width 200 :height 200})))
+     {:db db})))
+
+(rf/reg-event-fx
+ :import-qr
+ (fn [{:keys [db]} [_ json-str]]
+   (if-not (:unlocked db)
+     ;; Block import if not unlocked
+     (do
+       (js/alert "Profile must be unlocked to import data")
+       {:db db})
+     ;; Process import
+     (try
+       (let [imported (blockchain/import-state json-str)
+             own-answers {} ;; TODO: derive from current user's transactions
+             merged-chain (blockchain/merge-chain (:chain db) (:chain imported))
+             merged-mempool (blockchain/merge-mempool (:mempool db) (:mempool imported))
+             attested-mempool (blockchain/auto-attest-mempool merged-mempool own-answers (:pubkey db) (:privkey db))
+             quorum-txs (blockchain/filter-quorum-txs attested-mempool)
+             updated-distributions (blockchain/derive-distributions-from-chain merged-chain)
+             updated-pubkey-map (derive-pubkey-map-from-chain merged-chain)]
+         
+         (js/console.log "Import successful:" (count (:chain imported)) "blocks," (count (:mempool imported)) "transactions")
+         (js/console.log "Quorum transactions:" (count quorum-txs))
+         
+         ;; Auto-mine if any transactions meet quorum
+         (let [updated-db (assoc db
+                                :chain merged-chain
+                                :mempool quorum-txs
+                                :distributions updated-distributions
+                                :pubkey-map updated-pubkey-map)]
+           {:db updated-db
+            :dispatch-n [[:save-state]
+                        [:close-qr]
+                        (when (> (count quorum-txs) 0) [:mine-block])]}))
+       
+       (catch js/Error e
+         (js/alert (str "Import failed: " (.-message e)))
+         {:db db}))))))
 
 ;; Dev-only: Helper functions for console debugging
 (defn ^:dev/after-load expose-debug-helpers! []

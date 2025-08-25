@@ -7,7 +7,9 @@
       "Bash(curl:*)",
       "Bash(racket:*)",
       "Bash(grep:*)",
-      "Bash(npx shadow-cljs check:*)"
+      "Bash(npx shadow-cljs check:*)",
+      "Bash(sed:*)",
+      "Bash(clojure:*)"
     ],
     "deny": [],
     "ask": [],
