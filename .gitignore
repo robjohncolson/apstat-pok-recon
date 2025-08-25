@@ -1,0 +1,279 @@
+# =============================================================================
+# .gitignore for apstat-pok-recon ClojureScript Project
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# NPM & Node.js
+# -----------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npmrc
+.yarnrc
+.yarn/
+.pnp.*
+
+# Optional: Uncomment if you don't want to commit package-lock.json
+# package-lock.json
+
+# -----------------------------------------------------------------------------
+# Shadow-CLJS Build System
+# -----------------------------------------------------------------------------
+.shadow-cljs/
+public/js/
+target/
+out/
+resources/public/js/
+.cljs_node_repl/
+
+# Shadow-CLJS cache and temporary files
+.shadow-cljs-cache/
+shadow-cljs.log
+
+# -----------------------------------------------------------------------------
+# Clojure & ClojureScript
+# -----------------------------------------------------------------------------
+.cpcache/
+.cljs_rhino_repl/
+.nrepl-port
+.rebel_readline_history
+*.jar
+*.class
+*.log
+
+# Leiningen (if used)
+.lein-*
+profiles.clj
+
+# Boot (if used)
+.boot/
+
+# -----------------------------------------------------------------------------
+# Racket Prototypes (analysis/racket-proto/)
+# -----------------------------------------------------------------------------
+analysis/racket-proto/compiled/
+analysis/racket-proto/*.zo
+analysis/racket-proto/*.dep
+analysis/racket-proto/*.bak
+analysis/racket-proto/*~
+
+# Keep .rkt source files but ignore build artifacts
+*.zo
+*.dep
+
+# -----------------------------------------------------------------------------
+# Development & Editor Files
+# -----------------------------------------------------------------------------
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# IntelliJ IDEA / Cursive
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Atom
+.atom/
+
+# Eclipse
+.metadata
+.classpath
+.project
+.settings/
+bin/
+tmp/
+*.tmp
+*.bak
+
+# -----------------------------------------------------------------------------
+# Operating System Files
+# -----------------------------------------------------------------------------
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# -----------------------------------------------------------------------------
+# Logs & Debugging
+# -----------------------------------------------------------------------------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Runtime data
+.grunt
+lib-cov
+coverage/
+.nyc_output
+.cache
+.parcel-cache
+
+# -----------------------------------------------------------------------------
+# Testing & Coverage
+# -----------------------------------------------------------------------------
+.coverage/
+coverage/
+*.lcov
+.nyc_output/
+
+# Jest
+.jest/
+
+# Karma
+karma.conf.js
+
+# -----------------------------------------------------------------------------
+# Environment & Configuration
+# -----------------------------------------------------------------------------
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# dotenv environment variables file
+.env.example
+
+# -----------------------------------------------------------------------------
+# Temporary & Build Artifacts
+# -----------------------------------------------------------------------------
+*.tmp
+*.temp
+.tmp/
+.temp/
+.build/
+dist/
+build/
+
+# Compiled binary addons (if any)
+build/Release
+
+# Dependency directories for other tools
+bower_components/
+jspm_packages/
+
+# -----------------------------------------------------------------------------
+# Documentation Build Output
+# -----------------------------------------------------------------------------
+docs/_build/
+site/
+_site/
+
+# -----------------------------------------------------------------------------
+# Backup Files
+# -----------------------------------------------------------------------------
+*.bak
+*.backup
+*~
+
+# -----------------------------------------------------------------------------
+# Project-Specific Exclusions
+# -----------------------------------------------------------------------------
+
+# Keep these important files:
+# !src/**/*.cljs
+# !public/index.html
+# !shadow-cljs.edn
+# !package.json
+# !deps.edn
+# !analysis/racket-proto/*.rkt
+# !curriculum.json
+# !README.md
+# !foundation.txt
+
+# Ignore any local development overrides
+local.clj
+dev-local.clj
+prod-local.clj
+
+# Ignore deployment artifacts
+deploy/
+deployment/
+
+# Ignore any generated documentation
+javadoc/
+codox/
+
+# Ignore any local database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Ignore any certificates or keys (security)
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+
+# -----------------------------------------------------------------------------
+# Archive Files
+# -----------------------------------------------------------------------------
+*.7z
+*.dmg
+*.gz
+*.iso
+*.rar
+*.tar
+*.zip

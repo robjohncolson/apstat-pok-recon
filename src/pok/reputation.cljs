@@ -1,49 +1,93 @@
 (ns pok.reputation
   "Reputation and Peer Attestation System for PoK Blockchain
-   Phase 5 implementation with replay caps and fork decay tuning"
-  (:require [cljs.test :refer-macros [deftest is testing]]))
+   Complete port from Racket prototype with time decay, peer validation, and minority bonuses")
 
-;; Phase 5 Optimization: Replay cap to prevent spam
-(def ^:const REPLAY-CAP 50)
-(def ^:const DECAY-RATE 0.05) ; 5% decay per 24h window
-(def ^:const MIN-QUORUM-SIZE 3)
-(def ^:const CONSENSUS-THRESHOLD 0.67)
-(def ^:const MINORITY-BONUS 1.5)
+;; Reputation calculation parameters (ported from Racket consensus.rkt)
+(def ^:const REPUTATION-DECAY-RATE 0.05)     ; 5% decay per time window
+(def ^:const TIME-WINDOW-HOURS 24)           ; 24-hour reputation windows  
+(def ^:const MIN-QUORUM-SIZE 3)              ; Minimum peers for consensus
+(def ^:const CONSENSUS-THRESHOLD 0.67)       ; 67% agreement required
+(def ^:const MINORITY-BONUS-MULTIPLIER 1.5)  ; Bonus for minority-correct answers
+(def ^:const MAX-REPUTATION-SCORE 1000.0)    ; Maximum reputation cap
 
-;; Reputation calculation with time decay and replay caps
-(defn calculate-reputation
-  "Calculates reputation with time decay and replay protection"
-  [current-reputation accuracy attestations time-windows & {:keys [replay-cap] :or {replay-cap REPLAY-CAP}}]
-  (let [;; Apply time decay (5% per 24h window)
-        decayed-rep (* current-reputation (Math/pow (- 1 DECAY-RATE) time-windows))
-        
-        ;; Cap attestations to prevent replay attacks
-        capped-attestations (take replay-cap attestations)
-        
-        ;; Calculate accuracy bonus
-        accuracy-bonus (* accuracy 50)
-        
-        ;; Calculate attestation bonus
-        attestation-bonus (* (count capped-attestations) 5)
-        
-        ;; Calculate final reputation
-        new-reputation (+ decayed-rep accuracy-bonus attestation-bonus)]
-    
-    ;; Ensure reputation doesn't go below 0
-    (max 0.0 new-reputation)))
+;; Calculate peer validation score contribution
+;; Direct port from consensus.rkt
+(defn calculate-peer-score
+  "Calculate peer validation score based on attestations
+   Input: list of peer attestations
+   Output: peer score contribution (0-50)"
+  [attestations]
+  (if (empty? attestations)
+    0
+    (let [avg-confidence (/ (reduce + (map :confidence attestations))
+                           (count attestations))
+          validation-count (count attestations)]
+      (* avg-confidence validation-count 10))))
 
-;; Create attestation with validation
+;; Calculate reputation gain based on accuracy, peer validation, and time decay
+;; Direct port of calculate-reputation from consensus.rkt
+(defn calculate-reputation-gain
+  "Calculates reputation score based on accuracy, peer validations, and time decay
+   Input: current-score, recent-accuracy, peer-validations, time-windows-passed
+   Output: updated reputation score (0.0 to 1000.0)"
+  [current-score recent-accuracy peer-validations time-windows]
+  (let [accuracy-component (* recent-accuracy 100)
+        peer-component (calculate-peer-score peer-validations)
+        decay-factor (Math/pow (- 1 REPUTATION-DECAY-RATE) time-windows)
+        base-score (* current-score decay-factor)
+        new-score (+ base-score accuracy-component peer-component)]
+    (min new-score MAX-REPUTATION-SCORE)))
+
+;; Update reputation with time-based decay
+;; Direct port of reputation-decay from consensus.rkt
+(defn reputation-decay
+  "Apply time-based decay to reputation score
+   Input: current-reputation, hours-elapsed
+   Output: decayed reputation score"
+  [current-reputation hours-elapsed]
+  (let [windows-passed (/ hours-elapsed TIME-WINDOW-HOURS)
+        decay-factor (Math/pow (- 1 REPUTATION-DECAY-RATE) windows-passed)]
+    (* current-reputation decay-factor)))
+
+;; Minority bonus calculation for diverse thinking rewards
+;; Direct port of minority-correct-bonus from consensus.rkt
+(defn minority-correct-bonus
+  "Calculate bonus multiplier for minority-correct answers
+   Input: answer, question-statistics (consensus distribution)
+   Output: bonus multiplier (1.0 for majority, up to 1.5 for minority-correct)"
+  [answer question-stats]
+  (let [answer-percentage (get question-stats answer 0.5)]
+    (if (< answer-percentage 0.3)  ; Less than 30% chose this answer
+      MINORITY-BONUS-MULTIPLIER
+      1.0)))
+
+;; Form attestation quorum for question validation
+;; Direct port of form-attestation-quorum from consensus.rkt
+(defn form-attestation-quorum
+  "Form attestation quorum for question validation
+   Input: question-id, available-validators (list of profiles), min-reputation
+   Output: selected quorum (list of pubkeys)"
+  [question-id validators min-reputation]
+  (let [eligible-validators (filter #(>= (:reputation-score %) min-reputation) validators)
+        required-size (max MIN-QUORUM-SIZE (Math/ceil (/ (count validators) 5)))
+        shuffled-validators (shuffle eligible-validators)]
+    (take (min required-size (count eligible-validators)) shuffled-validators)))
+
+;; Create attestation for peer validation
+;; Direct port of make-attestation from consensus.rkt
 (defn make-attestation
-  "Creates a validated attestation record"
+  "Create a validated attestation record
+   Input: validator-pubkey, question-id, submitted-answer, correct-answer, confidence (0.0-1.0)
+   Output: attestation map"
   [validator-pubkey question-id submitted-answer correct-answer confidence]
   (when (and (string? validator-pubkey)
              (string? question-id)
+             (re-matches #"^U[0-9]+-L[0-9]+-Q[0-9]+$" question-id)  ; Validate question ID format
              (string? submitted-answer)
              (string? correct-answer)
              (number? confidence)
-             (>= confidence 0.0)
-             (<= confidence 1.0))
-    {:validator validator-pubkey
+             (<= 0.0 confidence 1.0))
+    {:validator-pubkey validator-pubkey
      :question-id question-id
      :submitted-answer submitted-answer
      :correct-answer correct-answer
@@ -51,95 +95,83 @@
      :timestamp (.getTime (js/Date.))
      :hash (str (.toString (js/Math.random) 36) (.getTime (js/Date.)))}))
 
-;; Form attestation quorum with minimum reputation requirement
-(defn form-attestation-quorum
-  "Forms attestation quorum with minimum reputation filter"
-  [question-id validators min-reputation]
-  (let [qualified-validators (filter #(>= (:reputation %) min-reputation) validators)
-        selected-validators (take MIN-QUORUM-SIZE qualified-validators)]
-    (when (>= (count selected-validators) MIN-QUORUM-SIZE)
-      {:question-id question-id
-       :validators selected-validators
-       :formed-at (.getTime (js/Date.))
-       :min-reputation min-reputation})))
-
-;; Validate quorum consensus with threshold
+;; Validate quorum consensus for question
+;; Direct port of validate-quorum-consensus from consensus.rkt
 (defn validate-quorum-consensus
-  "Validates that quorum reaches consensus threshold"
+  "Validate that quorum reaches consensus threshold
+   Input: list of attestations, consensus threshold
+   Output: boolean (true if consensus reached)"
   [attestations threshold]
-  (when (>= (count attestations) MIN-QUORUM-SIZE)
-    (let [total-weight (reduce + (map :confidence attestations))
-          agreeing-weight (reduce + 
-                                 (map :confidence 
-                                      (filter #(= (:submitted-answer %) (:correct-answer %)) attestations)))
-          consensus-ratio (/ agreeing-weight total-weight)]
+  (if (< (count attestations) MIN-QUORUM-SIZE)
+    false
+    (let [total-attestations (count attestations)
+          correct-count (count (filter #(= (:submitted-answer %) (:correct-answer %)) attestations))
+          consensus-ratio (/ correct-count total-attestations)]
       (>= consensus-ratio threshold))))
 
-;; Calculate minority-correct bonus
-(defn calculate-minority-bonus
-  "Calculates bonus for minority-correct answers"
-  [answer all-answers]
-  (let [total-responses (count all-answers)
-        same-answers (count (filter #(= % answer) all-answers))
-        minority-ratio (/ same-answers total-responses)]
-    (if (< minority-ratio 0.5)
-      MINORITY-BONUS
-      1.0)))
-
-;; Reputation leaderboard with sorting
-(defn create-reputation-leaderboard
-  "Creates sorted reputation leaderboard"
-  [profiles]
-  (->> profiles
-       (map (fn [profile]
-              {:username (:username profile)
-               :archetype (:archetype profile)
-               :reputation (:reputation-score profile)
-               :rank 0})) ; Rank will be added after sorting
-       (sort-by :reputation >)
-       (map-indexed (fn [idx profile] (assoc profile :rank (inc idx))))
-       (take 10))) ; Top 10 leaderboard
-
-;; Streak bonus calculation
-(defn calculate-streak-bonus
-  "Calculates bonus for consecutive correct answers"
-  [streak-count]
-  (cond
-    (>= streak-count 10) 2.0
-    (>= streak-count 5) 1.5
-    (>= streak-count 3) 1.2
-    :else 1.0))
-
-;; Fork decay tuning for consensus
-(defn calculate-fork-decay
-  "Calculates reputation decay based on fork participation"
-  [participation-ratio fork-duration-hours]
-  (let [base-decay 0.02 ; 2% base decay
-        duration-factor (/ fork-duration-hours 24) ; Normalize to days
-        participation-factor (- 1 participation-ratio)] ; Higher participation = less decay
-    (* base-decay duration-factor participation-factor)))
-
-;; Attestation validation with comprehensive checks
+;; Validate attestation structure and content
+;; Direct port of validate-attestation from consensus.rkt
 (defn validate-attestation
-  "Validates attestation structure and content"
+  "Validate attestation structure and content
+   Input: attestation map
+   Output: boolean (true if valid)"
   [attestation]
   (and (map? attestation)
-       (string? (:validator attestation))
+       (string? (:validator-pubkey attestation))
        (string? (:question-id attestation))
+       (re-matches #"^U[0-9]+-L[0-9]+-Q[0-9]+$" (:question-id attestation))
        (string? (:submitted-answer attestation))
        (string? (:correct-answer attestation))
-       (number? (:confidence attestation))
-       (>= (:confidence attestation) 0.0)
-       (<= (:confidence attestation) 1.0)
        (number? (:timestamp attestation))
-       (string? (:hash attestation))))
+       (number? (:confidence attestation))
+       (<= 0.0 (:confidence attestation) 1.0)))
 
-;; Phase 5 performance optimization for reputation updates
-(defn batch-update-reputation
-  "Efficiently batch update multiple reputation scores"
-  [reputation-updates]
-  (mapv (fn [{:keys [profile accuracy attestations time-windows]}]
-          (assoc profile :reputation-score
-                 (calculate-reputation (:reputation-score profile) 
-                                     accuracy attestations time-windows)))
-        reputation-updates))
+;; Streak bonus calculation for consecutive correct answers
+;; Port from consensus.rkt streak-bonus
+(defn streak-bonus
+  "Calculate bonus for consecutive correct answers
+   Input: consecutive-correct count
+   Output: bonus points (0-50)"
+  [consecutive-correct]
+  (min 50 (* consecutive-correct 2)))
+
+;; Update reputation with comprehensive scoring
+;; Direct port of update-reputation-score from consensus.rkt
+(defn update-reputation-score
+  "Update reputation with comprehensive scoring including bonuses
+   Input: profile, accuracy, peer-attestations, question-stats, streak-count
+   Output: updated profile with new reputation score"
+  [profile accuracy attestations question-stats streak-count]
+  (let [current-rep (:reputation-score profile)
+        base-accuracy-score (* accuracy 100)
+        peer-score (calculate-peer-score attestations)
+        streak-score (streak-bonus streak-count)
+        minority-bonus (if (map? question-stats)
+                        (minority-correct-bonus (:submitted-answer (first attestations)) question-stats)
+                        1.0)
+        total-score (+ current-rep 
+                      (* base-accuracy-score minority-bonus)
+                      peer-score
+                      streak-score)]
+    (assoc profile :reputation-score (min total-score MAX-REPUTATION-SCORE))))
+
+;; Reputation leaderboard calculation
+;; Direct port of reputation-leaderboard from consensus.rkt
+(defn reputation-leaderboard
+  "Create sorted reputation leaderboard
+   Input: list of profiles
+   Output: sorted list by reputation (highest first)"
+  [profiles]
+  (sort-by :reputation-score > profiles))
+
+;; Calculate reputation participation multiplier
+;; Direct port of consensus-participation-multiplier from consensus.rkt
+(defn consensus-participation-multiplier
+  "Calculate reputation multiplier based on peer consensus participation
+   Input: validator-reputation, consensus-accuracy, participation-rate
+   Output: reputation multiplier (0.5 to 2.0)"
+  [validator-rep consensus-accuracy participation-rate]
+  (let [rep-factor (/ validator-rep MAX-REPUTATION-SCORE)
+        accuracy-factor consensus-accuracy
+        participation-factor participation-rate]
+    (+ 0.5 (* 1.5 (/ (+ rep-factor accuracy-factor participation-factor) 3)))))

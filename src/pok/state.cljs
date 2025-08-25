@@ -2,7 +2,7 @@
   "Profile Management and Re-frame State for PoK Blockchain
    Phase 5 implementation with archetype system and performance optimization"
   (:require [re-frame.core :as rf]
-            [cljs.test :refer-macros [deftest is testing]]))
+            [pok.reputation :as reputation]))
 
 ;; Profile record definition
 (defrecord Profile [username archetype pubkey reputation-score])
@@ -67,8 +67,20 @@
 
 (rf/reg-event-db
  :update-reputation
- (fn [db [_ new-reputation]]
-   (assoc-in db [:profile :reputation-score] new-reputation)))
+ (fn [db [_ {:keys [accuracy attestations question-stats streak-count time-windows] 
+             :or {accuracy 1.0 attestations [] question-stats {} streak-count 0 time-windows 0}}]]
+   (let [current-profile (:profile db)]
+     (if current-profile
+       ;; Use the complete reputation calculation from reputation.cljs
+       (let [updated-profile (reputation/update-reputation-score 
+                             current-profile accuracy attestations question-stats streak-count)
+             ;; Apply time decay if time-windows is provided
+             final-profile (if (> time-windows 0)
+                            (update updated-profile :reputation-score 
+                                   #(reputation/reputation-decay % (* time-windows 24)))
+                            updated-profile)]
+         (assoc db :profile final-profile))
+       db))))
 
 ;; Re-frame subscriptions
 (rf/reg-sub
@@ -113,7 +125,7 @@
   (when-let [stored (.getItem js/localStorage "pok-profile")]
     (try
       (js->clj (.parse js/JSON stored) :keywordize-keys true)
-      (catch js/Error e nil))))
+      (catch js/Error _ nil))))
 
 ;; Archetype validation and description
 (defn get-archetype-description

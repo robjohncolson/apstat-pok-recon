@@ -1,12 +1,10 @@
 (ns pok.flow
   "Complete PoK workflow orchestration and end-to-end processing
    Phase 4 implementation with full cycle testing and validation"
-  (:require [pok.curriculum :as curriculum]
-            [pok.state :as state]
+  (:require [pok.state :as state]
             [pok.blockchain :as blockchain]
             [pok.reputation :as reputation]
-            [pok.qr :as qr]
-            [cljs.test :refer-macros [deftest is testing]]))
+            [re-frame.core :as rf]))
 
 ;; Phase 5 Testing: Complete 5-question cycle with reputation progression
 (defn test-complete-cycle
@@ -18,8 +16,7 @@
                                           :reputation-score 100.0})
         questions ["U1-L1-Q01" "U1-L1-Q02" "U1-L2-Q01" "U1-L2-Q02" "U1-L3-Q01"]
         answers ["A" "B" "A" "C" "B"]
-        correct-answers ["A" "B" "A" "C" "A"] ; Last one wrong for testing
-        start-time (.now js/performance)]
+        correct-answers ["A" "B" "A" "C" "A"]] ; Last one wrong for testing
     
     ;; Process each question-answer pair
     (loop [q-idx 0
@@ -44,8 +41,8 @@
               correct (nth correct-answers q-idx)
               op-start (.now js/performance)
               
-              ;; Simulate answer processing
-              result (process-answer-submission question-id answer start-profile)
+              ;; Simulate answer processing with correct answer  
+              _ (handle-answer-submission question-id answer correct start-profile)
               op-end (.now js/performance)
               op-time (- op-end op-start)
               
@@ -57,32 +54,43 @@
           
           (recur (inc q-idx) new-rep new-streak new-accuracy (conj performance-times op-time)))))))
 
-;; Mock answer processing for testing
-(defn process-answer-submission
-  "Processes answer submission with mock attestation and consensus"
-  [question-id answer profile]
-  (let [txn (blockchain/make-transaction (:pubkey profile) question-id answer)
-        attestations (generate-mock-attestations question-id answer)
-        consensus (validate-quorum-consensus attestations 0.67)]
-    {:transaction txn
-     :attestations attestations
-     :consensus-reached consensus
-     :reputation-delta (if consensus 10 0)}))
-
 ;; Generate mock peer attestations for testing
 (defn generate-mock-attestations
-  "Generates mock peer attestations for consensus testing"
-  [question-id submitted-answer]
+  "Generates mock peer attestations for consensus testing with proper structure"
+  [question-id submitted-answer correct-answer]
   (let [validators ["validator1" "validator2" "validator3" "validator4"]
         confidence-scores [0.8 0.9 0.7 0.85]]
     (mapv (fn [validator confidence]
-            {:validator validator
-             :question-id question-id
-             :submitted-answer submitted-answer
-             :correct-answer submitted-answer ; Mock consensus
-             :confidence confidence
-             :timestamp (.getTime (js/Date.))})
+            (reputation/make-attestation validator
+                                       question-id
+                                       submitted-answer
+                                       correct-answer
+                                       confidence))
           validators confidence-scores)))
+
+;; Complete answer processing with reputation integration
+(defn process-answer-submission
+  "Processes answer submission with full reputation calculation and consensus validation
+   Integrates with Re-frame state management for persistent reputation updates"
+  [question-id answer profile correct-answer]
+  (let [txn (blockchain/make-transaction (:pubkey profile) question-id answer)
+        attestations (generate-mock-attestations question-id answer correct-answer)
+        consensus (reputation/validate-quorum-consensus attestations reputation/CONSENSUS-THRESHOLD)
+        accuracy (if (= answer correct-answer) 1.0 0.0)]
+    
+    ;; If consensus is reached, update reputation through Re-frame
+    (when consensus
+      (rf/dispatch [:update-reputation {:accuracy accuracy
+                                       :attestations attestations
+                                       :question-stats {"A" 0.3 "B" 0.4 "C" 0.2 "D" 0.1} ; Mock stats
+                                       :streak-count 1  ; This should be tracked in app state
+                                       :time-windows 0}]))
+    
+    {:transaction txn
+     :attestations attestations
+     :consensus-reached consensus
+     :accuracy accuracy
+     :reputation-updated consensus}))
 
 ;; Validate quorum consensus
 (defn validate-quorum-consensus
@@ -94,15 +102,45 @@
     (and (>= total-attestations 3)
          (>= consensus-ratio threshold))))
 
-;; Validate individual attestation
+;; High-level function to handle complete answer flow
+(defn handle-answer-submission
+  "Main function to handle answer submission, validation, and reputation update
+   This is the primary integration point for the reputation system"
+  [question-id answer correct-answer _user-profile]
+  (let [;; Generate peer attestations using the ported reputation logic
+        attestations (generate-mock-attestations question-id answer correct-answer)
+        
+        ;; Validate consensus using the ported validation logic
+        consensus-reached (reputation/validate-quorum-consensus 
+                          attestations 
+                          reputation/CONSENSUS-THRESHOLD)
+        
+        ;; Calculate accuracy
+        accuracy (if (= answer correct-answer) 1.0 0.0)
+        
+        ;; Mock question statistics for minority bonus calculation
+        question-stats {answer 0.25 "A" 0.3 "B" 0.2 "C" 0.15 "D" 0.1}]
+    
+    ;; Only update reputation if consensus is reached and attestations are valid
+    (when (and consensus-reached 
+               (every? reputation/validate-attestation attestations))
+      (rf/dispatch [:update-reputation {:accuracy accuracy
+                                       :attestations attestations
+                                       :question-stats question-stats
+                                       :streak-count 1  ; Should be tracked in app state
+                                       :time-windows 0}]))
+    
+    {:question-id question-id
+     :answer answer
+     :correct-answer correct-answer
+     :accuracy accuracy
+     :attestations attestations
+     :consensus-reached consensus-reached
+     :reputation-updated (and consensus-reached 
+                             (every? reputation/validate-attestation attestations))}))
+
+;; Validate individual attestation (delegated to reputation module)
 (defn validate-attestation
-  "Validates individual attestation structure"
+  "Validates individual attestation structure - delegates to reputation module"
   [attestation]
-  (and (contains? attestation :validator)
-       (contains? attestation :question-id)
-       (contains? attestation :submitted-answer)
-       (contains? attestation :correct-answer)
-       (contains? attestation :confidence)
-       (contains? attestation :timestamp)
-       (>= (:confidence attestation) 0.0)
-       (<= (:confidence attestation) 1.0)))
+  (reputation/validate-attestation attestation))

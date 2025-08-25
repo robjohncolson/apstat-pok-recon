@@ -4,12 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AP Statistics PoK Blockchain</title>
-    <link rel="stylesheet" href="/styles.css">
-    <!-- Chart.js Embedded for Offline Operation -->
-    <script>
-    /* Chart.js 4.4.4 Embedded - Production Optimized */
-    !function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"function"==typeof define&&define.amd?define(e):(t="undefined"!=typeof globalThis?globalThis:t||self).Chart=e()}(this,(function(){"use strict";function t(t,e,s,i){let n;return"object"==typeof t?(n=t,s=e,i=s):(n={top:t,right:e,bottom:s,left:i}),{top:n.top||0,left:n.left||0,bottom:n.bottom||0,right:n.right||0}}const e={};function s(t,s){let i=e[t];return i||(i=e[t]=document.createElement("canvas").getContext("2d")),i}const i=/(hsla?|rgba?)\(([^)]*)\)/;function n(t){return t.charAt(0)!=="#"?t:t.substr(1)}function a(t){return t&&"object"==typeof t&&"default"in t?t:{default:t}}var o=a({version:"4.4.4",Chart:function(){}}),r=a({Chart:o.default.Chart});return o.default.Chart=r.default,o.default}));
-    </script>
+    
+    <!-- Chart.js 4.4.4 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.min.js"></script>
+    
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -49,19 +47,6 @@
             font-size: 1.1em;
         }
         
-        .status {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-            border-left: 4px solid #28a745;
-        }
-        
-        .status h3 {
-            margin: 0 0 10px;
-            color: #28a745;
-        }
-        
         .loading {
             text-align: center;
             padding: 40px;
@@ -82,58 +67,20 @@
             100% { transform: rotate(360deg); }
         }
         
-        .phase-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-        
-        .phase-card {
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+        #app {
+            min-height: 400px;
             padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         
-        .phase-card h4 {
-            margin: 0 0 15px;
-            color: #2c3e50;
-            font-size: 1.2em;
+        .fallback {
+            text-align: center;
+            padding: 2rem;
+            color: #6c757d;
         }
         
-        .feature-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .feature-list li {
-            padding: 5px 0;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .feature-list li:last-child {
-            border-bottom: none;
-        }
-        
-        .feature-list li:before {
-            content: "✓ ";
-            color: #28a745;
-            font-weight: bold;
-        }
-        
-        .console-output {
-            background: #2c3e50;
-            color: #ecf0f1;
-            border-radius: 8px;
-            padding: 20px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            margin: 20px 0;
-            max-height: 400px;
-            overflow-y: auto;
+        .fallback h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
         }
     </style>
 </head>
@@ -141,118 +88,25 @@
     <div class="container">
         <div class="header">
             <h1>🎓 AP Statistics PoK Blockchain</h1>
-            <p>Decentralized Educational Platform - Phase 2 ClojureScript Implementation</p>
-        </div>
-        
-        <div class="status">
-            <h3>🚀 Application Status</h3>
-            <p>ClojureScript modules loading and initializing...</p>
-        </div>
-        
-        <div class="loading">
-            <div class="spinner"></div>
-            <p>Initializing blockchain modules...</p>
-        </div>
-        
-        <div class="phase-info">
-            <div class="phase-card">
-                <h4>📦 Phase 2 Modules</h4>
-                <ul class="feature-list">
-                    <li>Curriculum Parser (curriculum.cljs)</li>
-                    <li>Profile & State Management (state.cljs)</li>
-                    <li>Blockchain Operations (blockchain.cljs)</li>
-                    <li>Reputation System (reputation.cljs)</li>
-                    <li>Core Integration (core.cljs)</li>
-                </ul>
-            </div>
-            
-            <div class="phase-card">
-                <h4>🎯 Key Features</h4>
-                <ul class="feature-list">
-                    <li>JSON Question Parsing (~816 questions)</li>
-                    <li>Hidden Pubkey Management</li>
-                    <li>5 Student Archetypes</li>
-                    <li>PoK Transaction Schema</li>
-                    <li>Peer Attestation Quorums</li>
-                    <li>Time-Decay Reputation</li>
-                </ul>
-            </div>
-            
-            <div class="phase-card">
-                <h4>⚡ Performance</h4>
-                <ul class="feature-list">
-                    <li>Question Parsing: &lt;2ms</li>
-                    <li>Transaction Creation: &lt;3ms</li>
-                    <li>Profile Generation: &lt;5ms</li>
-                    <li>Reputation Updates: &lt;1ms</li>
-                    <li>All operations &lt;50ms target</li>
-                </ul>
-            </div>
-            
-            <div class="phase-card">
-                <h4>🔧 Technology Stack</h4>
-                <ul class="feature-list">
-                    <li>ClojureScript 1.11.132</li>
-                    <li>Re-frame 1.4.2 (State Management)</li>
-                    <li>Reagent 1.2.0 (React Integration)</li>
-                    <li>Shadow-cljs (Build Tool)</li>
-                    <li>Web Crypto API (Hashing)</li>
-                </ul>
-            </div>
-        </div>
-        
-        <div class="console-output" id="console-output">
-            <div>Initializing AP Statistics PoK Blockchain Phase 3...</div>
-            <div>Loading ClojureScript modules with UI...</div>
-            <div>Setting up Chart.js rendering...</div>
-            <div>Mounting React components...</div>
-            <div>Ready for interactive question display!</div>
+            <p>Decentralized Educational Platform - ClojureScript Implementation</p>
         </div>
         
         <!-- Main application mount point -->
         <div id="app">
-            <div style="text-align: center; padding: 2rem; color: #6c757d;">
-                <div style="font-size: 2rem; margin-bottom: 1rem;">🔄</div>
+            <div class="fallback">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+                <h2>🔄</h2>
                 <div>Loading AP Statistics PoK Blockchain...</div>
-                <div style="font-size: 0.9rem; margin-top: 0.5rem;">Phase 3: UI with Chart.js rendering</div>
+                <div style="font-size: 0.9rem; margin-top: 0.5rem;">
+                    Initializing ClojureScript modules with reputation system...
+                </div>
             </div>
         </div>
     </div>
     
     <!-- ClojureScript main bundle -->
     <script src="/js/main.js"></script>
-    
-    <script>
-        // Simple console output simulation for demo
-        const consoleOutput = document.getElementById('console-output');
-        const messages = [
-            '🚀 AP Statistics PoK Blockchain Phase 3 initialized with UI!',
-            '🎓 Demonstrating Phase 3 ClojureScript Integration with UI',
-            '📋 Question parsed and ready for UI rendering',
-            '📊 Chart.js config created for visualization',
-            '🎨 UI components initialized with sample questions',
-            '🔧 Re-frame state management with UI integration',
-            '✅ Phase 3 integration demo completed - UI ready!',
-            '⚡ Performance benchmarks: All UI operations under 50ms',
-            '🧪 All module and UI tests passed',
-            '🎯 Phase 3 Architecture requirements validated',
-            '🚀 Phase 3 ClojureScript port with UI completed successfully!',
-            'Ready for Phase 4: QR sync and production deployment'
-        ];
-        
-        let index = 4; // Start after initial messages
-        const interval = setInterval(() => {
-            if (index < messages.length) {
-                consoleOutput.innerHTML += '<div>' + messages[index] + '</div>';
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-                index++;
-            } else {
-                clearInterval(interval);
-                document.querySelector('.loading').style.display = 'none';
-                document.querySelector('.status p').textContent = 'Phase 3 UI implementation completed successfully!';
-                document.querySelector('.status').style.borderColor = '#28a745';
-            }
-        }, 1000);
-    </script>
 </body>
 </html>
