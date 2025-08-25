@@ -4,9 +4,15 @@
       "Bash(npx shadow-cljs compile:*)",
       "Bash(npx shadow-cljs watch:*)",
       "Bash(npx shadow-cljs server:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(racket:*)",
+      "Bash(grep:*)",
+      "Bash(npx shadow-cljs check:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\^\\(rf"
+    ]
   }
 }

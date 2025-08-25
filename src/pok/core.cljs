@@ -36,19 +36,21 @@
                (let [curriculum (js->clj json-data :keywordize-keys true)]
                  (js/console.log "Loaded curriculum:" (count curriculum) "questions")
                  (js/console.log "First 3 questions:" (clj->js (take 3 curriculum)))
-                 (rf/dispatch [:load-curriculum curriculum]))))
+                 (rf/dispatch [:load-curriculum curriculum])
+                 (rf/dispatch [:initialize-with-curriculum]))))
       (.catch (fn [error]
                 (js/console.log "Error loading curriculum:" error)
-                (rf/dispatch [:load-curriculum []])))))
+                (rf/dispatch [:load-curriculum []])
+                (rf/dispatch [:initialize-with-curriculum])))))
 
 ;; App init
 (defn init []
   (dev-setup)
-  (rf/dispatch-sync [:initialize-db])  ; Assumes :initialize-db event in state.cljs
-  (load-curriculum)  ; Load curriculum after DB init
+  (rf/dispatch-sync [:initialize-db])  ; Initialize basic DB structure
+  (load-curriculum)  ; Load curriculum and check for existing profile
   (state/expose-debug-helpers!)  ; Dev-only console helpers
   (mount-root)
-  (println "🚀 AP Statistics PoK Blockchain initialized"))
+  (println "🚀 AP Statistics PoK Blockchain initialized with persistence"))
 
 ;; Shadow-cljs entry point
 (defn ^:export init! []

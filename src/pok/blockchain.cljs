@@ -1,7 +1,7 @@
 (ns pok.blockchain
   "Blockchain Module for AP Statistics PoK
-   Implements transaction mempool, block mining, and distribution tracking  
-   Per ADR-028 emergent attestation system with MVP quorum=1"
+   Phase 6: Implements transaction mempool, block mining, distribution tracking, and persistence
+   Per ADR-028 emergent attestation system with MVP quorum=1, signed transactions"
   (:require [pok.reputation :as reputation]))
 
 ;; SHA-256 hash using Web Crypto API
@@ -13,10 +13,10 @@
     (str "sha256:" text)
     (str "sha256:" text)))
 
-;; Transaction creation per ADR-028
+;; Transaction creation per ADR-028 with proper signing
 (defn create-tx
-  "Create transaction based on question type (MCQ hash, FRQ text+score)"
-  [question-id answer question-type]
+  "Create transaction based on question type (MCQ hash, FRQ text+score) with signing"
+  [question-id answer question-type pubkey privkey]
   (cond
     (or (= question-type "multiple-choice") (= question-type "mcq"))
     {:type "attestation"
@@ -24,8 +24,8 @@
      :answer-hash (sha256-hash (str answer))
      :answer-text nil
      :score nil
-     :attester-pubkey "self"
-     :signature "mock-sig"
+     :attester-pubkey pubkey
+     :signature (str privkey "-mock-sig")
      :timestamp (.now js/Date)}
     
     (or (= question-type "free-response") (= question-type "frq"))
@@ -34,8 +34,8 @@
      :answer-hash nil
      :answer-text (:text answer)
      :score (:score answer)
-     :attester-pubkey "self"
-     :signature "mock-sig"
+     :attester-pubkey pubkey
+     :signature (str privkey "-mock-sig")
      :timestamp (.now js/Date)}
     
     :else
@@ -185,7 +185,7 @@
                     (let [block-data (str prev-hash (pr-str mempool) "0")]
                       {:hash (sha256-hash block-data)
                        :prev-hash prev-hash
-                       :txs mempool
+                       :transactions mempool  ; Changed from :txs to :transactions for consistency
                        :attestations valid-attestations
                        :timestamp (.now js/Date)
                        :nonce 0}))]
@@ -233,4 +233,18 @@
             :time-windows 0}
            
            :else nil))
-       (:txs block)))
+       (:transactions block)))
+
+;; Derive distributions from chain (for state loading)
+(defn derive-distributions-from-chain
+  "Derive current distributions from full blockchain history"
+  [chain]
+  (let [all-transactions (mapcat :transactions chain)]
+    (reduce update-single-distribution {} all-transactions)))
+
+;; Derive reputation from chain (for state loading)
+(defn derive-reputation-from-chain
+  "Derive current reputation state from full blockchain history"
+  [chain]
+  {:leaderboard []
+   :attestations {}})

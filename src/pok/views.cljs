@@ -270,31 +270,89 @@
         :on-click #(rf/dispatch [:load-next-question])}
        "Next Question"]]]))
 
+;; Unlock modal component
+(defn unlock-modal
+  "Modal for entering seedphrase to unlock profile"
+  []
+  (let [seedphrase-input (r/atom "")]
+    [:div.unlock-modal
+     {:style {:position "fixed"
+              :top 0 :left 0 :right 0 :bottom 0
+              :background "rgba(0,0,0,0.5)"
+              :display "flex"
+              :align-items "center"
+              :justify-content "center"
+              :z-index 1000}}
+     [:div.modal-content
+      {:style {:background "white"
+               :border-radius "12px"
+               :padding "30px"
+               :max-width "400px"
+               :width "90%"
+               :box-shadow "0 8px 24px rgba(0,0,0,0.2)"}}
+      [:h2 {:style {:color "#2c3e50" :margin "0 0 20px 0" :text-align "center"}}
+       "🔐 Unlock Profile"]
+      [:p {:style {:color "#666" :margin "0 0 20px 0" :text-align "center"}}
+       "Enter your 4-word seedphrase to continue:"]
+      [:input
+       {:type "text"
+        :placeholder "word1 word2 word3 word4"
+        :value @seedphrase-input
+        :on-change #(reset! seedphrase-input (.. % -target -value))
+        :style {:width "100%"
+                :padding "12px"
+                :border "2px solid #e0e0e0"
+                :border-radius "6px"
+                :font-size "16px"
+                :margin-bottom "20px"
+                :font-family "monospace"}}]
+      [:div.modal-buttons
+       {:style {:display "flex" :gap "10px" :justify-content "center"}}
+       [:button
+        {:style {:background "#1976d2" :color "white" :border "none"
+                 :padding "12px 24px" :border-radius "6px" :cursor "pointer"
+                 :font-size "16px" :font-weight "bold"}
+         :on-click #(rf/dispatch [:unlock-profile @seedphrase-input])}
+        "Unlock"]
+       [:button
+        {:style {:background "#4caf50" :color "white" :border "none"
+                 :padding "12px 24px" :border-radius "6px" :cursor "pointer"
+                 :font-size "16px" :font-weight "bold"}
+         :on-click #(rf/dispatch [:create-profile "new-user"])}
+        "Create New"]]]])
+
+
 ;; Main application panel
 (defn main-panel
   "Main application interface combining all components"
   []
-  [:div.main-panel
-   {:style {:max-width "800px"
-            :margin "0 auto"
-            :padding "20px"
-            :font-family "system-ui, -apple-system, sans-serif"}}
-   
-   ;; Header
-   [:div.app-header
-    {:style {:text-align "center" :margin-bottom "30px"}}
-    [:h1 {:style {:color "#1976d2" :margin "0"}}
-     "🎓 AP Statistics PoK Blockchain"]
-    [:p {:style {:color "#666" :margin "10px 0 0 0"}}
-     "Interactive Testing Interface"]]
-   
-   ;; Main content area
-   [:div.content-area
-    ;; Left column - Question
-    [:div.question-section
-     [question-panel]]
-    
-    ;; Right column - Reputation & Controls  
-    [:div.sidebar-section
-     [reputation-panel]
-     [test-controls]]]])
+  (let [unlocked @(rf/subscribe [:unlocked])
+        profile @(rf/subscribe [:profile-visible])]
+    [:div.main-panel
+     {:style {:max-width "800px"
+              :margin "0 auto"
+              :padding "20px"
+              :font-family "system-ui, -apple-system, sans-serif"}}
+     
+     ;; Unlock modal if profile not unlocked
+     (when (and (not unlocked) (not profile))
+       [unlock-modal])
+     
+     ;; Header
+     [:div.app-header
+      {:style {:text-align "center" :margin-bottom "30px"}}
+      [:h1 {:style {:color "#1976d2" :margin "0"}}
+       "🎓 AP Statistics PoK Blockchain"]
+      [:p {:style {:color "#666" :margin "10px 0 0 0"}}
+       "Interactive Testing Interface"]]
+     
+     ;; Main content area
+     [:div.content-area
+      ;; Left column - Question
+      [:div.question-section
+       [question-panel]]
+      
+      ;; Right column - Reputation & Controls  
+      [:div.sidebar-section
+       [reputation-panel]
+       [test-controls]]])))

@@ -1,23 +1,60 @@
 (ns pok.state
   "Profile Management and Re-frame State for PoK Blockchain
-   Phase 5 implementation with archetype system and performance optimization"
+   Phase 6 implementation with persistence, seedphrase, and key management"
   (:require [re-frame.core :as rf]
             [re-frame.db :as rfdb]
+            [clojure.string :as str]
             [pok.reputation :as reputation]
             [pok.curriculum :as curriculum]
             [pok.blockchain :as blockchain]))
 
-;; Simple SHA-256 using built-in crypto or fallback hash
-(defn simple-sha256 
-  "Simple SHA-256 hash for answer hashing (MCQ)"
+;; Initialize DB after curriculum load
+(rf/reg-event-fx
+ :initialize-with-curriculum
+ (fn [{:keys [db]} _]
+   ;; Try to load existing state first
+   (if-let [stored-pubkey (load-from-local "pok-pubkey")]
+     ;; Existing profile found - stay locked until unlock
+     {:db (assoc db :unlocked false)}
+     ;; No existing profile - allow creation
+     {:db db})))
+
+;; Word list for seed generation (~100 words)
+(def ^:const WORD-LIST
+  ["apple" "banana" "cherry" "dog" "eagle" "forest" "guitar" "house" "island" "jungle"
+   "kite" "lemon" "mountain" "night" "ocean" "piano" "queen" "river" "sunset" "tree"
+   "umbrella" "valley" "water" "xray" "yellow" "zebra" "anchor" "bridge" "castle" "dragon"
+   "engine" "flower" "garden" "helmet" "igloo" "jacket" "kettle" "laptop" "mirror" "needle"
+   "orange" "pencil" "quartz" "rabbit" "spider" "table" "unicorn" "violin" "wizard" "xwing"
+   "yacht" "zeppelin" "artifact" "butterfly" "crystal" "diamond" "elephant" "firefly" "galaxy" "harmony"
+   "internet" "journey" "keyboard" "lighthouse" "melody" "notebook" "opal" "puzzle" "question" "rainbow"
+   "satellite" "telescope" "universe" "volcano" "whisper" "xenon" "yogurt" "zodiac" "adventure" "brilliant"
+   "compass" "discovery" "eclipse" "fountain" "glacier" "horizon" "infinity" "jewel" "knowledge" "legend"
+   "mystical" "navigator" "odyssey" "phoenix" "quantum" "revolution" "starlight" "triumph" "utopia" "victory"
+   "wanderer" "xfactor" "yearning" "zenith" "beacon" "courage" "destiny" "essence" "freedom" "grace"])
+
+;; Simple hash function using ClojureScript hash
+(defn simple-hash 
+  "Simple hash for key derivation"
   [text]
-  (if (and js/crypto js/crypto.subtle)
-    ;; Use Web Crypto API if available (async, but we'll use sync fallback)
-    (str (.toString (hash text) 16))  ; Fallback to cljs hash
-    (str (.toString (hash text) 16))))
+  (str (.toString (hash text) 16)))
+
+;; Generate 4-word seedphrase
+(defn generate-seedphrase
+  "Generates 4-word seedphrase from word list"
+  []
+  (str/join " " (take 4 (shuffle WORD-LIST))))
+
+;; Derive keys from seedphrase
+(defn derive-keys
+  "Derives private and public keys from seedphrase"
+  [seedphrase]
+  (let [privkey (simple-hash seedphrase)
+        pubkey (str "pk_" (simple-hash privkey))]
+    {:privkey privkey :pubkey pubkey}))
 
 ;; Profile record definition
-(defrecord Profile [username archetype pubkey reputation-score])
+(defrecord Profile [username archetype pubkey privkey reputation-score])
 
 ;; Archetype system constants
 (def ^:const ARCHETYPES
@@ -52,6 +89,31 @@
     :else
     :explorers))
 
+;; Persistence helper functions
+(defn save-to-local
+  "Save data to localStorage"
+  [key data]
+  (.setItem js/localStorage key (.stringify js/JSON (clj->js data))))
+
+(defn load-from-local
+  "Load data from localStorage"
+  [key]
+  (when-let [stored (.getItem js/localStorage key)]
+    (try
+      (js->clj (.parse js/JSON stored) :keywordize-keys true)
+      (catch js/Error _ nil))))
+
+;; Persistence effects
+(rf/reg-fx
+ ::save-local
+ (fn [[key data]]
+   (save-to-local key data)))
+
+(rf/reg-fx
+ ::load-local
+ (fn [key]
+   (load-from-local key)))
+
 ;; Re-frame event handlers
 (rf/reg-event-db
  :initialize-db
@@ -67,7 +129,12 @@
     :distributions {}
     :blockchain {:blocks [] :mempool []}
     :reputation {:leaderboard [] :attestations {}}
-    :ui {:modals {} :current-view :question}}))
+    :ui {:modals {} :current-view :question}
+    :seedphrase nil
+    :privkey nil
+    :pubkey nil
+    :pubkey-map {}
+    :unlocked false}))
 
 ;; Load curriculum event
 (rf/reg-event-db
@@ -78,14 +145,51 @@
           :current-question-index 0
           :current-question (first curriculum-data))))
 
-(rf/reg-event-db
+;; Generate seedphrase event
+(rf/reg-event-fx
+ :generate-seed
+ (fn [{:keys [db]} _]
+   (let [seedphrase (generate-seedphrase)
+         keys (derive-keys seedphrase)]
+     (js/console.log "Generated seed:" seedphrase)
+     (js/console.log "Derived pubkey:" (:pubkey keys))
+     {:db (assoc db 
+                :seedphrase seedphrase
+                :privkey (:privkey keys)
+                :pubkey (:pubkey keys))})))
+
+(rf/reg-event-fx
  :create-profile
- (fn [db [_ username]]
-   (let [new-profile (map->Profile {:username username
+ (fn [{:keys [db]} [_ username]]
+   (let [;; Generate seed if none exists
+         needs-seed (not (:seedphrase db))
+         current-seedphrase (if needs-seed (generate-seedphrase) (:seedphrase db))
+         keys (if needs-seed (derive-keys current-seedphrase) {:privkey (:privkey db) :pubkey (:pubkey db)})
+         
+         new-profile (map->Profile {:username username
                                    :archetype :explorers
-                                   :pubkey (str "pk_" (.toString (js/Math.random) 36))
-                                   :reputation-score 100.0})]
-     (assoc db :profile new-profile))))
+                                   :pubkey (:pubkey keys)
+                                   :privkey (:privkey keys)
+                                   :reputation-score 100.0})
+         
+         ;; Create "create-user" transaction
+         user-tx {:type "create-user"
+                 :pubkey (:pubkey keys)
+                 :username username
+                 :timestamp (.now js/Date)
+                 :attester-pubkey (:pubkey keys)
+                 :signature (str (:privkey keys) "-mock-sig")}]
+     
+     (when needs-seed
+       (js/console.log "Generated seed for new profile:" current-seedphrase))
+     
+     {:db (assoc db 
+                :profile new-profile
+                :seedphrase current-seedphrase
+                :privkey (:privkey keys)
+                :pubkey (:pubkey keys)
+                :unlocked true)
+      :dispatch [:add-to-mempool user-tx]})))
 
 (rf/reg-event-db
  :update-archetype
@@ -114,30 +218,36 @@
 (rf/reg-event-fx
  :submit-answer
  (fn [{:keys [db]} [_ question-id answer]]
-   (let [current-profile (:profile db)
-         current-question (:current-question db)
-         question-type (:type current-question)
-         
-         ;; Determine question type
-         current-type (cond
-                       (or (:choices current-question) (= question-type "multiple-choice")) "multiple-choice"
-                       (= question-type "free-response") "free-response"
-                       :else "multiple-choice")]
-     
-     (println (str "Processing answer: Q=" question-id " Type=" current-type " A=" answer))
-     
-     ;; Create profile if it doesn't exist  
-     (when-not current-profile
-       (rf/dispatch [:create-profile "test-user"]))
-     
-     ;; Create transaction and add to mempool
-     (let [tx (blockchain/create-tx question-id answer current-type)]
-       (rf/dispatch [:add-to-mempool tx]))
-     
-     ;; PoK: No immediate reputation updates - mining handles this
-     ;; Auto-advance handled in views.cljs
-     
-     {:db db})))
+   (if-not (:unlocked db)
+     ;; Block submission if not unlocked
+     (do
+       (js/alert "Profile must be unlocked to submit answers")
+       {:db db})
+     ;; Continue with submission
+     (let [current-profile (:profile db)
+           current-question (:current-question db)
+           question-type (:type current-question)
+           
+           ;; Determine question type
+           current-type (cond
+                         (or (:choices current-question) (= question-type "multiple-choice")) "multiple-choice"
+                         (= question-type "free-response") "free-response"
+                         :else "multiple-choice")]
+       
+       (println (str "Processing answer: Q=" question-id " Type=" current-type " A=" answer))
+       
+       ;; Create profile if it doesn't exist  
+       (when-not current-profile
+         (rf/dispatch [:create-profile "test-user"]))
+       
+       ;; Create transaction and add to mempool
+       (let [tx (blockchain/create-tx question-id answer current-type (:pubkey db) (:privkey db))]
+         (rf/dispatch [:add-to-mempool tx]))
+       
+       ;; PoK: No immediate reputation updates - mining handles this
+       ;; Auto-advance handled in views.cljs
+       
+       {:db db}))))
 
 ;; Load next question event handler
 (rf/reg-event-db
@@ -163,36 +273,47 @@
             :current-question-index prev-index
             :current-question prev-question))))
 
-;; Add transaction to mempool
-(rf/reg-event-db
+;; Add transaction to mempool with persistence
+(rf/reg-event-fx
  :add-to-mempool
- (fn [db [_ tx]]
-   (update db :mempool conj tx)))
+ (fn [{:keys [db]} [_ tx]]
+   (let [updated-db (update db :mempool conj tx)]
+     {:db updated-db
+      :dispatch [:save-state]})))
 
-;; Mine block from mempool
+;; Mine block from mempool with persistence
 (rf/reg-event-fx
  :mine-block
  (fn [{:keys [db]} _]
-   (let [mined-result (blockchain/mine-block db)]
-     (if (:block mined-result)
-       ;; Block mined successfully
-       (do
-         (js/console.log "Block mined:" (clj->js (:block mined-result)))
-         (js/console.log "Updated distributions:" (clj->js (:updated-distributions mined-result)))
+   (if-not (:unlocked db)
+     ;; Block mining if not unlocked
+     (do
+       (js/alert "Profile must be unlocked to mine blocks")
+       {:db db})
+     ;; Continue with mining
+     (let [mined-result (blockchain/mine-block db)]
+       (if (:block mined-result)
+         ;; Block mined successfully
+         (do
+           (js/console.log "Block mined:" (clj->js (:block mined-result)))
+           (js/console.log "Updated distributions:" (clj->js (:updated-distributions mined-result)))
+           
+           ;; Update reputation for each transaction in the block
+           (doseq [rep-update (blockchain/extract-reputation-updates (:block mined-result))]
+             (when rep-update
+               (rf/dispatch [:update-reputation rep-update])))
+           
+           ;; Update database with new block and distributions
+           (let [updated-db (assoc db 
+                                  :chain (:chain mined-result)
+                                  :mempool (:mempool mined-result) 
+                                  :distributions (:distributions mined-result)
+                                  :pubkey-map (derive-pubkey-map-from-chain (:chain mined-result)))]
+             {:db updated-db
+              :dispatch [:save-state]}))
          
-         ;; Update reputation for each transaction in the block
-         (doseq [rep-update (blockchain/extract-reputation-updates (:block mined-result))]
-           (when rep-update
-             (rf/dispatch [:update-reputation rep-update])))
-         
-         ;; Update database with new block and distributions
-         {:db (assoc db 
-                    :chain (:chain mined-result)
-                    :mempool (:mempool mined-result) 
-                    :distributions (:distributions mined-result))})
-       
-       ;; No block mined
-       {:db db}))))
+         ;; No block mined
+         {:db db})))))
 
 ;; Re-frame subscriptions
 (rf/reg-sub
@@ -268,6 +389,95 @@
  (fn [db _]
    (count (:mempool db))))
 
+;; New subscriptions for persistence system
+(rf/reg-sub
+ :unlocked
+ (fn [db _]
+   (:unlocked db)))
+
+(rf/reg-sub
+ :pubkey-map
+ (fn [db _]
+   (:pubkey-map db)))
+
+(rf/reg-sub
+ :current-pubkey
+ (fn [db _]
+   (:pubkey db)))
+
+;; Derive pubkey-to-username mapping from chain
+(defn derive-pubkey-map-from-chain
+  "Derives pubkey->username mapping from create-user transactions in chain"
+  [chain]
+  (reduce (fn [acc block]
+           (reduce (fn [acc2 tx]
+                    (if (= (:type tx) "create-user")
+                      (assoc acc2 (:pubkey tx) (:username tx))
+                      acc2))
+                  acc (:transactions block)))
+         {} chain))
+
+;; Save state to localStorage
+(rf/reg-event-fx
+ :save-state
+ (fn [{:keys [db]} _]
+   (save-to-local "pok-chain" (:chain db))
+   (save-to-local "pok-mempool" (:mempool db))
+   (save-to-local "pok-curriculum" (:curriculum db))
+   (save-to-local "pok-question-index" (:current-question-index db))
+   (save-to-local "pok-pubkey" (:pubkey db))
+   {:db db}))
+
+;; Load state from localStorage
+(rf/reg-event-fx
+ :load-state
+ (fn [{:keys [db]} _]
+   (let [loaded-chain (or (load-from-local "pok-chain") [])
+         loaded-mempool (or (load-from-local "pok-mempool") [])
+         loaded-curriculum (or (load-from-local "pok-curriculum") [])
+         loaded-index (or (load-from-local "pok-question-index") 0)
+         loaded-pubkey (load-from-local "pok-pubkey")
+         
+         ;; Derive data from chain
+         pubkey-map (derive-pubkey-map-from-chain loaded-chain)
+         distributions (blockchain/derive-distributions-from-chain loaded-chain)
+         reputation (blockchain/derive-reputation-from-chain loaded-chain)]
+     
+     (js/console.log "Loaded state - Chain:" (count loaded-chain) "blocks, Mempool:" (count loaded-mempool) "txs")
+     
+     {:db (assoc db
+                :chain loaded-chain
+                :mempool loaded-mempool
+                :curriculum loaded-curriculum
+                :current-question-index loaded-index
+                :current-question (nth loaded-curriculum loaded-index nil)
+                :pubkey loaded-pubkey
+                :pubkey-map pubkey-map
+                :distributions distributions
+                :reputation reputation)}))
+
+;; Unlock profile with seedphrase
+(rf/reg-event-fx
+ :unlock-profile
+ (fn [{:keys [db]} [_ seedphrase]]
+   (let [keys (derive-keys seedphrase)
+         stored-pubkey (load-from-local "pok-pubkey")]
+     
+     (if (and stored-pubkey (= (:pubkey keys) stored-pubkey))
+       ;; Correct seedphrase - unlock and load state
+       (do
+         (js/console.log "Profile unlocked successfully")
+         {:db (assoc db
+                    :seedphrase seedphrase
+                    :privkey (:privkey keys)
+                    :pubkey (:pubkey keys)
+                    :unlocked true)
+          :dispatch [:load-state]})
+       ;; Incorrect seedphrase or no stored profile
+       (do
+         (js/alert "Invalid seedphrase or no existing profile. Create new profile?")
+         {:db db})))))
+
 ;; Dev-only: Helper functions for console debugging
 (defn ^:dev/after-load expose-debug-helpers! []
   (when goog.DEBUG
@@ -278,7 +488,9 @@
           #(get (deref rfdb/app-db) :profile "No profile"))
     (set! (.-getDbPath js/window) 
           (fn [path] (get-in (deref rfdb/app-db) path "Path not found")))
-    (println "💡 Console helpers: getReputationScore() | getProfile() | getDbPath([path])")))
+    (set! (.-getSeed js/window)
+          #(get (deref rfdb/app-db) :seedphrase "No seed"))
+    (println "💡 Console helpers: getReputationScore() | getProfile() | getDbPath([path]) | getSeed()")))
 
 ;; Profile persistence helpers
 (defn save-profile-to-storage!
@@ -309,4 +521,4 @@
        (keyword? (:archetype profile))
        (contains? ARCHETYPES (:archetype profile))
        (string? (:pubkey profile))
-       (number? (:reputation-score profile))))
+       (number? (:reputation-score profile)))))
