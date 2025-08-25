@@ -6,6 +6,57 @@
             [pok.reputation :as reputation]
             [re-frame.core :as rf]))
 
+;; Generate mock peer attestations for testing
+(defn generate-mock-attestations
+  "Generates mock peer attestations for consensus testing with proper structure"
+  [question-id submitted-answer correct-answer]
+  (let [validators ["validator1" "validator2" "validator3" "validator4"]
+        confidence-scores [0.8 0.9 0.7 0.85]]
+    (mapv (fn [validator confidence]
+            (reputation/make-attestation validator
+                                       question-id
+                                       submitted-answer
+                                       correct-answer
+                                       confidence))
+          validators confidence-scores)))
+
+;; High-level function to handle complete answer flow
+(defn handle-answer-submission
+  "Main function to handle answer submission, validation, and reputation update
+   This is the primary integration point for the reputation system"
+  [question-id answer correct-answer _user-profile]
+  (let [;; Generate peer attestations using the ported reputation logic
+        attestations (generate-mock-attestations question-id answer correct-answer)
+        
+        ;; Validate consensus using the ported validation logic
+        consensus-reached (reputation/validate-quorum-consensus 
+                          attestations 
+                          reputation/CONSENSUS-THRESHOLD)
+        
+        ;; Calculate accuracy
+        accuracy (if (= answer correct-answer) 1.0 0.0)
+        
+        ;; Mock question statistics for minority bonus calculation
+        question-stats {answer 0.25 "A" 0.3 "B" 0.2 "C" 0.15 "D" 0.1}]
+    
+    ;; Only update reputation if consensus is reached and attestations are valid
+    (when (and consensus-reached 
+               (every? reputation/validate-attestation attestations))
+      (rf/dispatch [:update-reputation {:accuracy accuracy
+                                       :attestations attestations
+                                       :question-stats question-stats
+                                       :streak-count 1  ; Should be tracked in app state
+                                       :time-windows 0}]))
+    
+    {:question-id question-id
+     :answer answer
+     :correct-answer correct-answer
+     :accuracy accuracy
+     :attestations attestations
+     :consensus-reached consensus-reached
+     :reputation-updated (and consensus-reached 
+                             (every? reputation/validate-attestation attestations))}))
+
 ;; Phase 5 Testing: Complete 5-question cycle with reputation progression
 (defn test-complete-cycle
   "Tests complete 5-question cycle with reputation progression"
@@ -54,20 +105,6 @@
           
           (recur (inc q-idx) new-rep new-streak new-accuracy (conj performance-times op-time)))))))
 
-;; Generate mock peer attestations for testing
-(defn generate-mock-attestations
-  "Generates mock peer attestations for consensus testing with proper structure"
-  [question-id submitted-answer correct-answer]
-  (let [validators ["validator1" "validator2" "validator3" "validator4"]
-        confidence-scores [0.8 0.9 0.7 0.85]]
-    (mapv (fn [validator confidence]
-            (reputation/make-attestation validator
-                                       question-id
-                                       submitted-answer
-                                       correct-answer
-                                       confidence))
-          validators confidence-scores)))
-
 ;; Complete answer processing with reputation integration
 (defn process-answer-submission
   "Processes answer submission with full reputation calculation and consensus validation
@@ -101,43 +138,6 @@
         consensus-ratio (/ agreeing-attestations total-attestations)]
     (and (>= total-attestations 3)
          (>= consensus-ratio threshold))))
-
-;; High-level function to handle complete answer flow
-(defn handle-answer-submission
-  "Main function to handle answer submission, validation, and reputation update
-   This is the primary integration point for the reputation system"
-  [question-id answer correct-answer _user-profile]
-  (let [;; Generate peer attestations using the ported reputation logic
-        attestations (generate-mock-attestations question-id answer correct-answer)
-        
-        ;; Validate consensus using the ported validation logic
-        consensus-reached (reputation/validate-quorum-consensus 
-                          attestations 
-                          reputation/CONSENSUS-THRESHOLD)
-        
-        ;; Calculate accuracy
-        accuracy (if (= answer correct-answer) 1.0 0.0)
-        
-        ;; Mock question statistics for minority bonus calculation
-        question-stats {answer 0.25 "A" 0.3 "B" 0.2 "C" 0.15 "D" 0.1}]
-    
-    ;; Only update reputation if consensus is reached and attestations are valid
-    (when (and consensus-reached 
-               (every? reputation/validate-attestation attestations))
-      (rf/dispatch [:update-reputation {:accuracy accuracy
-                                       :attestations attestations
-                                       :question-stats question-stats
-                                       :streak-count 1  ; Should be tracked in app state
-                                       :time-windows 0}]))
-    
-    {:question-id question-id
-     :answer answer
-     :correct-answer correct-answer
-     :accuracy accuracy
-     :attestations attestations
-     :consensus-reached consensus-reached
-     :reputation-updated (and consensus-reached 
-                             (every? reputation/validate-attestation attestations))}))
 
 ;; Validate individual attestation (delegated to reputation module)
 (defn validate-attestation

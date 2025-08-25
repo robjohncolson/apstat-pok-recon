@@ -6,7 +6,6 @@
     "release": "shadow-cljs release app && echo 'Build in public/'"
   },
   "dependencies": {
-    "chart.js": "^4.4.4",
     "crypto-js": "^4.2.0",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",

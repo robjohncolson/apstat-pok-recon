@@ -309,7 +309,7 @@
       (is size-under-limit "Bundle size under 3MB target"))
     
     ;; Test embedded dependencies (Chart.js availability)
-    (is (exists? js/Chart) "Chart.js embedded and available")
+    (is (some? js/Chart) "Chart.js embedded and available")
     
     ;; Test essential files presence (would check actual files in deployment)
     (let [essential-files ["index.html" "styles.css" "main.js"]
