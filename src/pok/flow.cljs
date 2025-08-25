@@ -110,7 +110,7 @@
   "Processes answer submission with full reputation calculation and consensus validation
    Integrates with Re-frame state management for persistent reputation updates"
   [question-id answer profile correct-answer]
-  (let [txn (blockchain/make-transaction (:pubkey profile) question-id answer)
+  (let [txn (blockchain/create-tx question-id answer "multiple-choice")
         attestations (generate-mock-attestations question-id answer correct-answer)
         consensus (reputation/validate-quorum-consensus attestations reputation/CONSENSUS-THRESHOLD)
         accuracy (if (= answer correct-answer) 1.0 0.0)]

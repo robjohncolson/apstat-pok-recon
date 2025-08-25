@@ -143,17 +143,22 @@
    Output: updated profile with new reputation score"
   [profile accuracy attestations question-stats streak-count]
   (let [current-rep (:reputation-score profile)
-        base-accuracy-score (* accuracy 100)
+        ;; Fix: Apply negative for wrong answers per Racket formula
+        base-accuracy-score (if (> accuracy 0.5) 
+                             (* accuracy 100)       ; Positive for correct 
+                             (* -50 (- 1 accuracy))) ; Negative for incorrect
         peer-score (calculate-peer-score attestations)
         streak-score (streak-bonus streak-count)
         minority-bonus (if (map? question-stats)
                         (minority-correct-bonus (:submitted-answer (first attestations)) question-stats)
                         1.0)
-        total-score (+ current-rep 
-                      (* base-accuracy-score minority-bonus)
-                      peer-score
-                      streak-score)]
-    (assoc profile :reputation-score (min total-score MAX-REPUTATION-SCORE))))
+        delta (+ (* base-accuracy-score minority-bonus) peer-score streak-score)
+        total-score (+ current-rep delta)]
+    
+    ;; Debug logging as requested
+    (js/console.log "Result:" accuracy "Current rep:" current-rep "Calculated delta:" delta "New rep:" total-score)
+    
+    (assoc profile :reputation-score (max 0 (min total-score MAX-REPUTATION-SCORE)))))
 
 ;; Reputation leaderboard calculation
 ;; Direct port of reputation-leaderboard from consensus.rkt

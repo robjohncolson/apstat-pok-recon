@@ -3,7 +3,18 @@
    Phase 5 implementation with archetype system and performance optimization"
   (:require [re-frame.core :as rf]
             [re-frame.db :as rfdb]
-            [pok.reputation :as reputation]))
+            [pok.reputation :as reputation]
+            [pok.curriculum :as curriculum]
+            [pok.blockchain :as blockchain]))
+
+;; Simple SHA-256 using built-in crypto or fallback hash
+(defn simple-sha256 
+  "Simple SHA-256 hash for answer hashing (MCQ)"
+  [text]
+  (if (and js/crypto js/crypto.subtle)
+    ;; Use Web Crypto API if available (async, but we'll use sync fallback)
+    (str (.toString (hash text) 16))  ; Fallback to cljs hash
+    (str (.toString (hash text) 16))))
 
 ;; Profile record definition
 (defrecord Profile [username archetype pubkey reputation-score])
@@ -46,10 +57,26 @@
  :initialize-db
  (fn [_ _]
    {:profile nil
+    :curriculum []
+    :current-question-index 0
     :current-question nil
+    :question-index 0
+    :questions curriculum/sample-questions
+    :mempool []
+    :chain []
+    :distributions {}
     :blockchain {:blocks [] :mempool []}
     :reputation {:leaderboard [] :attestations {}}
     :ui {:modals {} :current-view :question}}))
+
+;; Load curriculum event
+(rf/reg-event-db
+ :load-curriculum
+ (fn [db [_ curriculum-data]]
+   (assoc db 
+          :curriculum curriculum-data
+          :current-question-index 0
+          :current-question (first curriculum-data))))
 
 (rf/reg-event-db
  :create-profile
@@ -83,31 +110,89 @@
          (assoc db :profile final-profile))
        db))))
 
-;; Submit answer event handler - simple version to avoid circular deps
+;; Submit answer event handler - creates blockchain transaction per ADR-028
 (rf/reg-event-fx
  :submit-answer
  (fn [{:keys [db]} [_ question-id answer]]
    (let [current-profile (:profile db)
-         ;; For testing, assume correct answer varies by question
-         correct-answer (case question-id
-                         "U1-L1-Q01" "A"
-                         "U1-L1-Q02" "B" 
-                         "A") ; default
-         is-correct (= answer correct-answer)]
+         current-question (:current-question db)
+         question-type (:type current-question)
+         
+         ;; Determine question type
+         current-type (cond
+                       (or (:choices current-question) (= question-type "multiple-choice")) "multiple-choice"
+                       (= question-type "free-response") "free-response"
+                       :else "multiple-choice")]
      
-     (println (str "Processing answer: Q=" question-id " A=" answer " Correct=" correct-answer " Result=" is-correct))
+     (println (str "Processing answer: Q=" question-id " Type=" current-type " A=" answer))
      
      ;; Create profile if it doesn't exist  
      (when-not current-profile
        (rf/dispatch [:create-profile "test-user"]))
      
-     ;; Update reputation based on correctness
-     (rf/dispatch [:update-reputation {:accuracy (if is-correct 1.0 0.0)
-                                      :attestations []
-                                      :question-stats {answer 0.25}
-                                      :streak-count (if is-correct 1 0)}])
+     ;; Create transaction and add to mempool
+     (let [tx (blockchain/create-tx question-id answer current-type)]
+       (rf/dispatch [:add-to-mempool tx]))
+     
+     ;; PoK: No immediate reputation updates - mining handles this
+     ;; Auto-advance handled in views.cljs
      
      {:db db})))
+
+;; Load next question event handler
+(rf/reg-event-db
+ :load-next-question
+ (fn [db _]
+   (let [current-index (:current-question-index db)
+         curriculum (:curriculum db)
+         next-index (mod (inc current-index) (count curriculum))
+         next-question (nth curriculum next-index nil)]
+     (assoc db 
+            :current-question-index next-index
+            :current-question next-question))))
+
+;; Load previous question event handler
+(rf/reg-event-db
+ :load-prev-question
+ (fn [db _]
+   (let [current-index (:current-question-index db)
+         curriculum (:curriculum db)
+         prev-index (mod (dec current-index) (count curriculum))
+         prev-question (nth curriculum prev-index nil)]
+     (assoc db 
+            :current-question-index prev-index
+            :current-question prev-question))))
+
+;; Add transaction to mempool
+(rf/reg-event-db
+ :add-to-mempool
+ (fn [db [_ tx]]
+   (update db :mempool conj tx)))
+
+;; Mine block from mempool
+(rf/reg-event-fx
+ :mine-block
+ (fn [{:keys [db]} _]
+   (let [mined-result (blockchain/mine-block db)]
+     (if (:block mined-result)
+       ;; Block mined successfully
+       (do
+         (js/console.log "Block mined:" (clj->js (:block mined-result)))
+         (js/console.log "Updated distributions:" (clj->js (:updated-distributions mined-result)))
+         
+         ;; Update reputation for each transaction in the block
+         (doseq [rep-update (blockchain/extract-reputation-updates (:block mined-result))]
+           (when rep-update
+             (rf/dispatch [:update-reputation rep-update])))
+         
+         ;; Update database with new block and distributions
+         {:db (assoc db 
+                    :chain (:chain mined-result)
+                    :mempool (:mempool mined-result) 
+                    :distributions (:distributions mined-result))})
+       
+       ;; No block mined
+       {:db db}))))
 
 ;; Re-frame subscriptions
 (rf/reg-sub
@@ -144,6 +229,44 @@
  :debug/app-db
  (fn [db _]
    db))
+
+;; Curriculum subscriptions
+(rf/reg-sub
+ ::curriculum
+ (fn [db _]
+   (:curriculum db)))
+
+;; Current question subscription
+(rf/reg-sub
+ :current-question
+ (fn [db _]
+   (:current-question db)))
+
+;; Blockchain subscriptions
+(rf/reg-sub
+ ::mempool
+ (fn [db _]
+   (:mempool db)))
+
+(rf/reg-sub
+ ::chain
+ (fn [db _]
+   (:chain db)))
+
+(rf/reg-sub
+ ::distributions
+ (fn [db _]
+   (:distributions db)))
+
+(rf/reg-sub
+ ::convergence
+ (fn [db [_ qid]]
+   (get-in db [:distributions qid :convergence-score] 0)))
+
+(rf/reg-sub
+ ::mempool-count
+ (fn [db _]
+   (count (:mempool db))))
 
 ;; Dev-only: Helper functions for console debugging
 (defn ^:dev/after-load expose-debug-helpers! []

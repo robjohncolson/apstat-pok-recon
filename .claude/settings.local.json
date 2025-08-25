@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx shadow-cljs compile:*)"
+      "Bash(npx shadow-cljs compile:*)",
+      "Bash(npx shadow-cljs watch:*)",
+      "Bash(npx shadow-cljs server:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
