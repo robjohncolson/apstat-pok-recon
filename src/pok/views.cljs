@@ -3,8 +3,7 @@
    Focuses on question display, answer submission, and reputation tracking"
   (:require [reagent.core :as r]
             [re-frame.core :as rf]
-            [pok.curriculum :as curriculum]
-            [pok.state :as state]))
+            [pok.curriculum :as curriculum]))
 
 ;; Chart.js wrapper component
 (defn chart-component
@@ -38,7 +37,7 @@
   []
   (let [selected-answer (r/atom {:text "" :score 3})]  ; Support both MCQ (key) and FRQ (map)
     (fn []
-      (let [current-question @(rf/subscribe [:current-question])]
+      (let [current-question (let [cq @(rf/subscribe [:current-question])] (js/console.log "current-question:" cq) cq)]
         ;; Debug logging for question type
         (js/console.log "Question type:" (:type current-question) (:id current-question))
         [:div.question-panel
@@ -175,9 +174,9 @@
   []
   (let [reputation-score @(rf/subscribe [:reputation-score])
         profile @(rf/subscribe [:profile-visible])
-        archetype-data @(rf/subscribe [:profile-archetype-data])
-        mempool-count @(rf/subscribe [::state/mempool-count])
-        chain @(rf/subscribe [::state/chain])]
+        archetype-data (let [pad @(rf/subscribe [:profile-archetype-data])] (js/console.log "profile-archetype-data:" pad) pad)
+        mempool-count @(rf/subscribe [:mempool-count])
+        chain @(rf/subscribe [:chain])]
     [:div.reputation-panel
      {:style {:background-color "white"
               :border-radius "12px"
@@ -204,7 +203,7 @@
       [:div {:style {:color "#666" :font-size "14px"}}
        "Mempool: " mempool-count " | Chain: " (count chain)]
       [:div {:style {:color "#666" :font-size "12px" :margin-top "5px"}}
-       "Curriculum: " (count @(rf/subscribe [::state/curriculum])) " questions"]]
+       "Curriculum: " (count @(rf/subscribe [:curriculum])) " questions"]]
      
      (when profile
        [:div.profile-info
@@ -321,7 +320,7 @@
 (defn test-controls
   "Controls for testing the reputation system"
   []
-  (let [mempool-count @(rf/subscribe [::state/mempool-count])]
+  (let [mempool-count @(rf/subscribe [:mempool-count])]
     [:div.test-controls
      {:style {:background-color "#fff3e0"
               :border-radius "8px"
@@ -429,41 +428,15 @@
 
 ;; Main application panel
 (defn main-panel
-  "Main application interface combining all components"
+  "Minimal main panel with visible styling"
   []
-  (let [unlocked @(rf/subscribe [:unlocked])
-        profile @(rf/subscribe [:profile-visible])]
-    [:div.main-panel
-     {:style {:max-width "800px"
-              :margin "0 auto"
-              :padding "20px"
-              :font-family "system-ui, -apple-system, sans-serif"}}
-     
-     ;; Unlock modal if profile not unlocked
-     (when (and (not unlocked) (not profile))
-       [unlock-modal])
-     
-     ;; QR sync modal if shown
-     (when @(rf/subscribe [::state/qr-modal-visible])
-       [qr-modal])
-     
-     ;; Header
-     [:div.app-header
-      {:style {:text-align "center" :margin-bottom "30px"}}
-      [:h1 {:style {:color "#1976d2" :margin "0"}}
-       "🎓 AP Statistics PoK Blockchain"]
-      [:p {:style {:color "#666" :margin "10px 0 0 0"}}
-       "Interactive Testing Interface"]]
-     
-     ;; Main content area
-     [:div.content-area
-      ;; Left column - Question
-      [:div.question-section
-       [question-panel]]
-      
-      ;; Right column - Reputation & Controls  
-      [:div.sidebar-section
-       [reputation-panel]
-       ;; [leaderboard-panel] ; Temporarily disabled due to syntax error
-       [test-controls]]]])))
+  [:div.main-panel
+   {:style {:padding "20px"
+            :font-family "Arial, sans-serif"
+            :background-color "#f0f0f0"
+            :min-height "100vh"}}
+   [:h1 {:style {:color "#333" :font-size "24px"}} "🎓 AP Statistics PoK - TEST MODE"]
+   [:p {:style {:color "#666" :font-size "16px"}} "Application is running successfully!"]
+   [:div {:style {:background-color "white" :padding "15px" :border-radius "5px" :margin-top "20px"}}
+    [:p "This confirms the React app is mounted and rendering correctly."]]]))
 

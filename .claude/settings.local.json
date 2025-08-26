@@ -21,7 +21,10 @@
       "Bash(npm install:*)",
       "Bash(clj-kondo:*)",
       "Bash(python3:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git reset:*)",
+      "Read(//mnt/c/Users/reber/Downloads/apstat-pok-recon/public/js/**)"
     ],
     "deny": [],
     "ask": [],

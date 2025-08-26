@@ -8,16 +8,52 @@
             [pok.curriculum :as curriculum]
             [pok.blockchain :as blockchain]))
 
+;; Top-level side effect to verify namespace loading
+(js/console.log "[INIT] pok.state namespace loaded - registering events and subscriptions...")
+
+;; Removed duplicate registration - using the main one below
+
+(js/console.log "[OK] About to define persistence helpers...")
+
+;; Persistence helper functions
+(js/console.log "[OK] Reached start of persistence defns...")
+(defn save-to-local
+  "Save data to localStorage"
+  [key data]
+  (.setItem js/localStorage key (js/JSON.stringify (clj->js data))))
+
+(js/console.log "[OK] Defined save-to-local")
+
+(defn load-from-local
+  "Load data from localStorage"
+  [key]
+  (when-let [stored (.getItem js/localStorage key)]
+    (try
+      (js->clj (js/JSON.parse stored) :keywordize-keys true)
+      (catch js/Error _ nil))))
+
+(js/console.log "[OK] Defined load-from-local")
+
+(js/console.log "[OK] Defined persistence helper functions!")
+
 ;; Initialize DB after curriculum load
-(rf/reg-event-fx
- :initialize-with-curriculum
- (fn [{:keys [db]} _]
-   ;; Try to load existing state first
-   (if-let [stored-pubkey (load-from-local "pok-pubkey")]
-     ;; Existing profile found - stay locked until unlock
-     {:db (assoc db :unlocked false)}
-     ;; No existing profile - allow creation
-     {:db db})))
+(js/console.log "[INIT] Registering :initialize-with-curriculum event...")
+(js/console.log "[OK] About to enter try block for event registration...")
+(try
+  (rf/reg-event-fx
+   :initialize-with-curriculum
+   (fn [{:keys [db]} _]
+     ;; Try to load existing state first
+     (if-let [stored-pubkey (load-from-local "pok-pubkey")]
+       ;; Existing profile found - stay locked until unlock
+       {:db (assoc db :unlocked false)}
+       ;; No existing profile - allow creation
+       {:db db})))
+  (js/console.log "[OK] :initialize-with-curriculum registered successfully!")
+  (catch js/Error e
+    (js/console.error "[ERROR] Failed to register :initialize-with-curriculum:" e)))
+
+(js/console.log "[OK] Reached word list definition...")
 
 ;; Word list for seed generation (~100 words)
 (def ^:const WORD-LIST
@@ -64,6 +100,18 @@
    :learners {:emoji "📚" :description "Steady progress and improvement"}
    :socials {:emoji "🤝" :description "Collaborative and helpful"}})
 
+;; Derive pubkey-to-username mapping from chain
+(defn derive-pubkey-map-from-chain
+  "Derives pubkey->username mapping from create-user transactions in chain"
+  [chain]
+  (reduce (fn [acc block]
+            (reduce (fn [acc2 tx]
+                      (if (= (:type tx) "create-user")
+                        (assoc acc2 (:pubkey tx) (:username tx))
+                        acc2))
+                    acc (:transactions block)))
+          {} chain))
+
 ;; Calculate archetype based on performance metrics
 (defn calculate-archetype
   "Calculates user archetype based on performance metrics"
@@ -89,36 +137,27 @@
     :else
     :explorers))
 
-;; Persistence helper functions
-(defn save-to-local
-  "Save data to localStorage"
-  [key data]
-  (.setItem js/localStorage key (.stringify js/JSON (clj->js data))))
-
-(defn load-from-local
-  "Load data from localStorage"
-  [key]
-  (when-let [stored (.getItem js/localStorage key)]
-    (try
-      (js->clj (.parse js/JSON stored) :keywordize-keys true)
-      (catch js/Error _ nil))))
-
 ;; Persistence effects
 (rf/reg-fx
- ::save-local
+ :save-local
  (fn [[key data]]
    (save-to-local key data)))
 
 (rf/reg-fx
- ::load-local
+ :load-local
  (fn [key]
    (load-from-local key)))
 
+(js/console.log "[OK] About to register Re-frame event handlers...")
+
 ;; Re-frame event handlers
-(rf/reg-event-db
- :initialize-db
- (fn [_ _]
-   {:profile nil
+(js/console.log "[INIT] Registering :initialize-db event...")
+(try
+  (rf/reg-event-db
+   :initialize-db
+   (fn [_ _]
+     (js/console.log "[OK] :initialize-db event executed!")
+     {:profile nil
     :curriculum []
     :current-question-index 0
     :current-question nil
@@ -135,15 +174,23 @@
     :pubkey nil
     :pubkey-map {}
     :unlocked false}))
+  (js/console.log "[OK] :initialize-db registered successfully!")
+  (catch js/Error e
+    (js/console.error "[ERROR] Failed to register :initialize-db:" e)))
 
-;; Load curriculum event
-(rf/reg-event-db
+;; Load curriculum event  
+(js/console.log "[INIT] Registering :load-curriculum event...")
+(try
+  (rf/reg-event-db
  :load-curriculum
  (fn [db [_ curriculum-data]]
    (assoc db
           :curriculum curriculum-data
           :current-question-index 0
           :current-question (first curriculum-data))))
+  (js/console.log "[OK] :load-curriculum registered successfully!")
+  (catch js/Error e
+    (js/console.error "[ERROR] Failed to register :load-curriculum:" e)))
 
 ;; Generate seedphrase event
 (rf/reg-event-fx
@@ -327,10 +374,14 @@
 (rf/reg-sub
  :profile-archetype-data
  (fn [db _]
-   (when-let [profile (:profile db)]
+   (if-let [profile (:profile db)]
      (let [archetype (:archetype profile)
            archetype-data (get ARCHETYPES archetype)]
-       (merge archetype-data {:archetype archetype})))))
+       (merge archetype-data {:archetype archetype}))
+     ;; Default archetype data when no profile
+     {:emoji "🔍" 
+      :archetype :explorers 
+      :description "Getting started"})))
 
 (rf/reg-sub
  :reputation-score
@@ -355,41 +406,45 @@
 
 ;; Curriculum subscriptions
 (rf/reg-sub
- ::curriculum
+ :curriculum
  (fn [db _]
-   (:curriculum db)))
+   (or (:curriculum db) [])))
 
 ;; Current question subscription
 (rf/reg-sub
  :current-question
  (fn [db _]
-   (:current-question db)))
+   (or (:current-question db)
+       {:id "loading"
+        :prompt "Loading questions..."
+        :type "loading"
+        :choices []})))
 
 ;; Blockchain subscriptions
 (rf/reg-sub
- ::mempool
+ :mempool
  (fn [db _]
-   (:mempool db)))
+   (or (:mempool db) [])))
 
 (rf/reg-sub
- ::chain
+ :chain
  (fn [db _]
-   (:chain db)))
+   (or (:chain db) [])))
 
 (rf/reg-sub
- ::distributions
+ :distributions
  (fn [db _]
    (:distributions db)))
 
 (rf/reg-sub
- ::convergence
+ :convergence
  (fn [db [_ qid]]
    (get-in db [:distributions qid :convergence-score] 0)))
 
 (rf/reg-sub
- ::mempool-count
+ :mempool-count
  (fn [db _]
-   (count (:mempool db))))
+   (count (or (:mempool db) []))))
 
 ;; New subscriptions for persistence system
 (rf/reg-sub
@@ -409,21 +464,12 @@
 
 ;; QR Modal subscription
 (rf/reg-sub
- ::qr-modal-visible
+ :qr-modal-visible
  (fn [db _]
    (get-in db [:ui :modals :qr] false)))
 
 ;; Derive pubkey-to-username mapping from chain
-(defn derive-pubkey-map-from-chain
-  "Derives pubkey->username mapping from create-user transactions in chain"
-  [chain]
-  (reduce (fn [acc block]
-            (reduce (fn [acc2 tx]
-                      (if (= (:type tx) "create-user")
-                        (assoc acc2 (:pubkey tx) (:username tx))
-                        acc2))
-                    acc (:transactions block)))
-          {} chain))
+
 
 ;; Save state to localStorage
 (rf/reg-event-fx
@@ -557,7 +603,7 @@
           (fn [path] (get-in (deref rfdb/app-db) path "Path not found")))
     (set! (.-getSeed js/window)
           #(get (deref rfdb/app-db) :seedphrase "No seed"))
-    (println "💡 Console helpers: getReputationScore() | getProfile() | getDbPath([path]) | getSeed()")))
+    (println "[INFO] Console helpers: getReputationScore() | getProfile() | getDbPath([path]) | getSeed()")))
 
 ;; Profile persistence helpers
 (defn save-profile-to-storage!
@@ -571,7 +617,7 @@
   []
   (when-let [stored (.getItem js/localStorage "pok-profile")]
     (try
-      (js->clj (.parse js/JSON stored) :keywordize-keys true)
+      (js->clj (js/JSON.parse stored) :keywordize-keys true)
       (catch js/Error _ nil))))
 
 ;; Archetype validation and description
